@@ -1,17 +1,21 @@
 /**
  * Wire interpreter over a live NatsConnection.
  *
- * Subscribe-before-publish ordering is structural: the inbox subscription is
- * bound before the request publishes (SUB precedes PUB on one connection, so
- * the server registers interest first). The subscription lives in the
- * caller's scope — dropping it IS cancellation (Protocol §6.7: interest
- * drops, server discards at no cost). Unsubscribe is an explicit release
- * finalizer, not an iterator side effect, so it runs exactly once on scope
- * close regardless of how the stream ended.
+ * Subscriptions run in CALLBACK mode feeding a scoped Queue — never the
+ * async-iterator bridge. The iterator's `return()` does not settle while a
+ * `next()` is pending, which deadlocks interruption (a timeout or race
+ * loser waits on stream cleanup, which waits on a message that will never
+ * come). Callback mode has no pending pull: scope close unsubscribes
+ * synchronously and shuts the queue down.
+ *
+ * Subscribe-before-publish ordering is structural: `request` acquires the
+ * inbox subscription before publishing. The queue is bounded dropping —
+ * the transport is at-most-once and the real client sheds on slow
+ * consumers too; correctness never depends on unbounded buffering.
  */
-import { Effect, Layer, Stream } from "effect"
+import { Cause, Effect, Layer, Queue, Stream } from "effect"
 import { createInbox, headers as mkHeaders } from "@nats-io/nats-core"
-import type { Msg, Subscription } from "@nats-io/nats-core"
+import type { Msg } from "@nats-io/nats-core"
 import { WireFailure } from "./errors.js"
 import { NatsConnection } from "./nats-connection.js"
 import { Wire, type PublishOptions, type ReplyMessage, type SubscribeOptions } from "./wire.js"
@@ -39,35 +43,56 @@ const toReplyMessage = (m: Msg): ReplyMessage => {
   }
 }
 
+const SUBSCRIPTION_BUFFER = 8_192
+
 export const layerLive: Layer.Layer<Wire, never, NatsConnection> = Layer.effect(Wire)(
   Effect.gen(function* () {
     const conn = yield* NatsConnection
     const nc = conn.nc
 
-    const acquireSubscription = (subject: string, options?: SubscribeOptions) =>
-      Effect.acquireRelease(
-        Effect.try({
-          try: () =>
-            nc.subscribe(
-              subject,
-              options?.queueGroup !== undefined ? { queue: options.queueGroup } : {},
-            ),
-          catch: toWireFailure(`subscribe ${subject}`),
-        }),
-        (sub) =>
-          Effect.sync(() => {
-            try {
-              sub.unsubscribe()
-            } catch {
-              // connection already closed: interest is gone either way
-            }
+    const acquireReplies = (subject: string, options?: SubscribeOptions) =>
+      Effect.gen(function* () {
+        const queue = yield* Effect.acquireRelease(
+          Queue.dropping<ReplyMessage, WireFailure | Cause.Done>(SUBSCRIPTION_BUFFER),
+          (q) => Queue.shutdown(q),
+        )
+        yield* Effect.acquireRelease(
+          Effect.try({
+            try: () =>
+              nc.subscribe(subject, {
+                ...(options?.queueGroup !== undefined ? { queue: options.queueGroup } : {}),
+                callback: (err, m) => {
+                  if (err !== null) {
+                    Queue.failCauseUnsafe(
+                      queue,
+                      Cause.fail(
+                        new WireFailure({ reason: `subscription ${subject}: ${String(err)}` }),
+                      ),
+                    )
+                  } else if (m.headers?.code === 503 && m.data.length === 0) {
+                    // server-generated no-responders status: nobody is bound
+                    Queue.failCauseUnsafe(
+                      queue,
+                      Cause.fail(new WireFailure({ reason: `no responders for ${m.subject}` })),
+                    )
+                  } else {
+                    Queue.offerUnsafe(queue, toReplyMessage(m))
+                  }
+                },
+              }),
+            catch: toWireFailure(`subscribe ${subject}`),
           }),
-      )
-
-    const subscriptionStream = (sub: Subscription): Stream.Stream<ReplyMessage, WireFailure> =>
-      Stream.fromAsyncIterable(sub, toWireFailure("subscription terminated abnormally")).pipe(
-        Stream.map(toReplyMessage),
-      )
+          (sub) =>
+            Effect.sync(() => {
+              try {
+                sub.unsubscribe()
+              } catch {
+                // connection already closed: interest is gone either way
+              }
+            }),
+        )
+        return Stream.fromQueue(queue)
+      })
 
     const publish = (
       subject: string,
@@ -96,15 +121,12 @@ export const layerLive: Layer.Layer<Wire, never, NatsConnection> = Layer.effect(
       request: (subject, payload) =>
         Effect.gen(function* () {
           const inbox = createInbox()
-          // bind first…
-          const sub = yield* acquireSubscription(inbox)
-          // …then publish (Protocol §8.5 subscribe-before-publish ordering)
+          const replies = yield* acquireReplies(inbox)
           yield* publish(subject, payload, { replyTo: inbox })
-          return subscriptionStream(sub)
+          return replies
         }),
 
-      subscribe: (subject, options) =>
-        Effect.map(acquireSubscription(subject, options), subscriptionStream),
+      subscribe: acquireReplies,
 
       publish,
     })

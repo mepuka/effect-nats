@@ -193,6 +193,11 @@ You are done when ALL of these hold, and not before:
    per-message construction. → P3.
 10. **A slow test is a race until proven slow.** Probe and timestamp before
     optimizing or raising timeouts. → P1.
+11. **Never bridge subscriptions through async iterators.** A pending
+    `iter.next()` that only a later finalizer can resolve deadlocks
+    interruption — every timeout and race in the process then hangs. Push
+    into a scoped Queue from a callback instead, and test interruption
+    against the REAL dependency, not just Effect-native fakes. → S6.
 
 ## When to read the references
 

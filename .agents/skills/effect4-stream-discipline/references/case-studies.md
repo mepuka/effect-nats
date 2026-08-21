@@ -13,6 +13,7 @@ NATS agent-protocol runtime (reply streams shaped
 - [S3 — Error channel leaks through Stream.unwrap](#s3)
 - [S4 — The consumer enforced nothing (DFA)](#s4)
 - [S5 — The seam dropped a wire fact](#s5)
+- [S6 — Async-iterator bridges deadlock interruption](#s6)
 - [C1 — Fork-then-return: the fake-ready race](#c1)
 - [C2 — The lying latch: released on failure](#c2)
 - [C3 — TestClock and fibers that never started](#c3)
@@ -264,6 +265,80 @@ expect(error._tag).toBe("ProtocolViolation")
 happy paths: for every rule of the form "X but not when Y", the seam must
 carry enough to observe Y. Design the seam from the rules, then write the
 interpreter.
+
+---
+
+<a name="s6"></a>
+## S6 — Async-iterator bridges deadlock interruption
+
+**Symptom.** The entire live-broker integration suite hung — every test,
+including ones needing only a connection — while the identical logic passed
+against the in-memory loopback bus. Even an outer `Effect.timeout(8000)`
+around the hung program never fired.
+
+**Diagnosis (the Phase-3 probe ladder, live).** Probe 1: raw
+subscribe/publish/receive → 17ms, transport fine. Probe 2: server layer
+construction with a logging wire decorator → all subscriptions bound in
+21ms. Probe 3: client discovery → hung after `request ->`. Probe 4 (minimal
+hypothesis): can a sleep win a race against an idle subscription?
+
+```ts
+const winner = yield* Effect.race(
+  Effect.as(Stream.runCollect(msgs), "collected"),
+  Effect.as(Effect.sleep(500), "slept"),
+)
+// hung forever — the sleep FIRED, but the race could not finish
+```
+
+**Cause.** The race loser must be interrupted before the race completes.
+The collect fiber sat inside `Stream.fromAsyncIterable(natsSubscription)`
+with a `next()` promise pending; interruption closes the stream's scope,
+whose finalizer calls `iter.return()` — and the NATS iterator's `return()`
+does not settle while a `next()` is pending; it needs `unsubscribe()` to
+resolve the pull. But `unsubscribe` was a finalizer in the OUTER scope,
+which runs only after the fiber's interruption completes. Circular wait:
+interruption → stream cleanup → `iter.return()` → waits for unsubscribe →
+waits for interruption. Every timeout, race, and `Fiber.interrupt` in the
+process then hangs on that fiber. The loopback bus never showed it because
+Effect-native `Queue.take` interrupts cleanly.
+
+**Repair.** Remove the iterator from the path entirely: callback-mode
+subscription feeding a scoped Effect Queue. No pending pull exists, so
+interruption is just a queue-take interrupt; scope close unsubscribes
+synchronously and shuts the queue down (LIFO: unsubscribe first, then
+shutdown):
+
+```ts
+const queue = yield* Effect.acquireRelease(
+  Queue.dropping<ReplyMessage, WireFailure | Cause.Done>(8_192),
+  (q) => Queue.shutdown(q),
+)
+yield* Effect.acquireRelease(
+  Effect.try({
+    try: () => nc.subscribe(subject, {
+      callback: (err, m) => {
+        if (err !== null) Queue.failCauseUnsafe(queue, Cause.fail(new WireFailure({ ... })))
+        else Queue.offerUnsafe(queue, toReplyMessage(m))
+      },
+    }),
+    catch: toWireFailure(`subscribe ${subject}`),
+  }),
+  (sub) => Effect.sync(() => { try { sub.unsubscribe() } catch {} }),
+)
+return Stream.fromQueue(queue)
+```
+
+Bonus surfaced by the same live run: the broker answers a request with no
+responders with an instant 503 status message — map it to a fast typed
+transport failure instead of letting the caller misparse it (or wait out an
+inactivity window it doesn't need).
+
+**Principle.** `Stream.fromAsyncIterable` inherits the cancellation
+semantics of the library's iterator — and most I/O libraries' iterators
+cannot cancel a pending `next()`. For any subscription-like source, prefer
+push (callback → `Queue.offerUnsafe` → `Stream.fromQueue`) over pull
+bridging. And test interruption against the REAL dependency: in-memory
+fakes are Effect-native and interrupt too politely to catch this class.
 
 ---
 
