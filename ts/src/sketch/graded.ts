@@ -97,19 +97,25 @@ declare const corePub: Graded<AtMostOnce, void>
 declare const jsPub: Graded<AtLeastOnce, { readonly seq: number }>
 declare const jsPubDedup: Graded<DedupWindow, { readonly seq: number; readonly duplicate: boolean }>
 
-// Composition accumulates grades in R for free (this is real flatMap, not a stub):
-const pipeline = Effect.flatMap(jsPub, () => corePub)
-type _T1 = Expect<Equal<EffectiveGrade<ServicesOf<typeof pipeline>>, "at-most-once">>
-type _T2 = Expect<Equal<EffectiveGrade<ServicesOf<typeof jsPub>>, "at-least-once">>
-type _T3 = Expect<Equal<EffectiveGrade<ServicesOf<typeof jsPubDedup>>, "dedup-window">>
-type _T4 = Expect<Equal<EffectiveGrade<ServicesOf<Effect.Effect<number>>>, "pure">>
+// Typechecked but never executed — the declared ops have no runtime values.
+const _examples = () => {
+  // Composition accumulates grades in R for free (real flatMap, not a stub):
+  const pipeline = Effect.flatMap(jsPub, () => corePub)
+  type _T1 = Expect<Equal<EffectiveGrade<ServicesOf<typeof pipeline>>, "at-most-once">>
+  type _T2 = Expect<Equal<EffectiveGrade<ServicesOf<typeof jsPub>>, "at-least-once">>
+  type _T3 = Expect<Equal<EffectiveGrade<ServicesOf<typeof jsPubDedup>>, "dedup-window">>
+  type _T4 = Expect<Equal<EffectiveGrade<ServicesOf<Effect.Effect<number>>>, "pure">>
 
-// A floor admits its own rung and stronger:
-export const ok1 = requireFloor<AtLeastOnce>()(jsPub)
-export const ok2 = requireFloor<AtLeastOnce>()(jsPubDedup)
+  // A floor admits its own rung and stronger:
+  const ok1 = requireFloor<AtLeastOnce>()(jsPub)
+  const ok2 = requireFloor<AtLeastOnce>()(jsPubDedup)
 
-// @ts-expect-error — the pipeline contains an at-most-once op; the floor refuses it
-export const bad1 = requireFloor<AtLeastOnce>()(pipeline)
+  // @ts-expect-error — the pipeline contains an at-most-once op; the floor refuses it
+  const bad1 = requireFloor<AtLeastOnce>()(pipeline)
 
-// Discharging the weak rung (responsibility explicitly taken) re-admits it:
-export const ok3 = requireFloor<AtLeastOnce>()(attest<AtMostOnce>()(pipeline))
+  // Discharging the weak rung (responsibility explicitly taken) re-admits it:
+  const ok3 = requireFloor<AtLeastOnce>()(attest<AtMostOnce>()(pipeline))
+
+  return [ok1, ok2, ok3, bad1] as const
+}
+void _examples
