@@ -11,7 +11,7 @@ in the sibling repo `../Foldable`; this repo holds the code, Foldable holds the 
 |---|---|
 | `ts/` | The Effect TypeScript project. `effect` pinned to `4.0.0-rc.111`, `@nats-io/*` to `3.4.0`. |
 | `lean/` | The Lean 4 model (Lake package). Formalizes semantics the TS layer claims to have. |
-| `repos/nats.js/` | Vendored `nats-io/nats.js` (git subtree, squashed) — the official TypeScript client monorepo. Read-only reference. |
+| `repos/nats.js/` | Vendored `nats-io/nats.js` @ `3a7b736b` (git subtree, squashed) — the official TypeScript client monorepo. Read-only reference. |
 | `notes/` | Design notes and decisions, numbered, append-only. |
 
 ## Sibling evidence corpus
