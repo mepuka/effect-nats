@@ -1,5 +1,6 @@
 /**
- * Delivery-guarantee ladder — mirrors `lean/EffectNats/Guarantee.lean`.
+ * Delivery-guarantee ladder — mirrors `EffectNats.Guarantee` in the proved
+ * companion package (github.com/mepuka/effect-nats-lean).
  *
  * The carrier matches the Lean inductive one-to-one so the two sides referee
  * the same encoding. `dedup-window` names the window-bounded dedup mechanism;

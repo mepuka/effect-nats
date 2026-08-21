@@ -1,0 +1,2295 @@
+{
+  "source": "docs/upstream/core-protocol-v0.3.0.md",
+  "sourceCommit": "d907f5ca080528ee5e9e1385f0591c42f7fdb9b8",
+  "sourceSha256": "4c03389e0c2157d961d9db4399f422dbe2d1664d35e7362dccef5fa52e671a85",
+  "extractionVersion": 1,
+  "requirements": [
+    {
+      "id": "AP03-L0053",
+      "section": "2. Subject hierarchy",
+      "line": 53,
+      "kinds": [
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `agents` | Fixed prefix. Reserved for this protocol.                                                                                                                              |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > parses verb-first identity tree",
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > rejects wrong shape and unknown verbs"
+      ]
+    },
+    {
+      "id": "AP03-L0054",
+      "section": "2. Subject hierarchy",
+      "line": 54,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `verb`   | Endpoint discriminator. One of `prompt`, `hb`, `status`, `attachments` (see table below). Reserved for protocol use; agents MUST NOT use these tokens for any other purpose. |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > rejects wrong shape and unknown verbs",
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0055",
+      "section": "2. Subject hierarchy",
+      "line": 55,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `agent`  | Identifier of the harness / runtime. SHOULD be (an abbreviation of) `metadata.agent` (§3.2). Conventional abbreviations: `cc` for `claude-code`, `oc` for `openclaw` — see Appendix C. |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0056",
+      "section": "2. Subject hierarchy",
+      "line": 56,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `owner`  | Operator or account owning the instance. SHOULD match `metadata.owner`.                                                                                                |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0057",
+      "section": "2. Subject hierarchy",
+      "line": 57,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `name`   | Instance name within `{agent}/{owner}`. Lives only in the subject — not echoed in metadata.                                                                            |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0059",
+      "section": "2. Subject hierarchy",
+      "line": 59,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The protocol reserves four verbs and assigns each a default subject. The endpoint **name** (used in `$SRV.INFO`) MUST match the verb token; the subject is open to overrides via `$SRV.INFO`, but the channels shipped with this protocol use the defaults.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction"
+      ]
+    },
+    {
+      "id": "AP03-L0063",
+      "section": "2. Subject hierarchy",
+      "line": 63,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `prompt`      | `agents.prompt.{agent}.{owner}.{name}`           | Required prompt endpoint (§5, §6).                                               | No — default only        |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0064",
+      "section": "2. Subject hierarchy",
+      "line": 64,
+      "kinds": [
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `hb`          | `agents.hb.{agent}.{owner}.{name}`               | Liveness beacon (§8). The verb is the abbreviation `hb` because heartbeat traffic dominates per-account subject volume. | **Yes** (protocol-fixed) |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > heartbeat wildcard partitions from prompts (§2.4)"
+      ]
+    },
+    {
+      "id": "AP03-L0065",
+      "section": "2. Subject hierarchy",
+      "line": 65,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `status`      | `agents.status.{agent}.{owner}.{name}`           | On-demand status request/reply (§8.7).                                           | No — default only        |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0066",
+      "section": "2. Subject hierarchy",
+      "line": 66,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `attachments` | `agents.attachments.{agent}.{owner}.{name}`      | Reserved for the future chunked-upload endpoint (§5.5).                          | No — default only        |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0070",
+      "section": "2. Subject hierarchy",
+      "line": 70,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- An agent MUST register an endpoint named `prompt`.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid"
+      ]
+    },
+    {
+      "id": "AP03-L0071",
+      "section": "2. Subject hierarchy",
+      "line": 71,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- An agent MUST register an endpoint named `status` (§8.7).",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8.7.1 status endpoint replies from the same builder"
+      ]
+    },
+    {
+      "id": "AP03-L0072",
+      "section": "2. Subject hierarchy",
+      "line": 72,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- If the agent exposes the future artifact endpoint, it MUST be named `attachments`.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0074",
+      "section": "2. Subject hierarchy",
+      "line": 74,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Callers therefore MUST learn endpoint subjects from `$SRV.INFO.agents` (§4); they MUST NOT construct endpoint subjects from identity alone. The heartbeat subject is the one exception — it is fixed so callers can subscribe to `agents.hb.*.*.*` without a lookup.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction",
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > heartbeat wildcard partitions from prompts (§2.4)"
+      ]
+    },
+    {
+      "id": "AP03-L0078",
+      "section": "2.1 Prompt endpoint metadata",
+      "line": 78,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The `prompt` endpoint's registration (§3) MUST declare endpoint metadata:",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0089",
+      "section": "2.1 Prompt endpoint metadata",
+      "line": 89,
+      "kinds": [
+        "normative",
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `max_payload`    | string  | Yes      | Maximum single-message request payload size. Format is a positive integer followed by `B`, `KB`, `MB`, or `GB` (e.g. `512KB`, `1MB`, `4MB`). Callers MUST enforce locally (§5.4).  |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > max_payload format (§2.1)",
+        "src/test/robustness.test.ts :: numeric safety > max_payload byte counts beyond MAX_SAFE_INTEGER are rejected",
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads"
+      ]
+    },
+    {
+      "id": "AP03-L0090",
+      "section": "2.1 Prompt endpoint metadata",
+      "line": 90,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `attachments_ok` | boolean | Yes      | Whether the endpoint accepts JSON envelopes containing an `attachments` array. If `false`, callers MUST NOT send attachments; plain text and JSON-without-attachments remain valid. |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > attachments when attachments_ok=false fails locally",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.1 attachments with attachments_ok=false → 400 · terminator, no ack"
+      ]
+    },
+    {
+      "id": "AP03-L0094",
+      "section": "2.2 Naming rules",
+      "line": 94,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Subject tokens MUST conform to NATS subject naming rules (https://docs.nats.io/nats-concepts/subjects#characters-allowed-and-recommended-for-subject-names).",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > token rules: $ prefix, whitespace, control chars forbidden (§2.2)",
+        "src/test/properties.test.ts :: subject matcher laws (§2) > accepted tokens never contain dot, wildcard, whitespace, or $ prefix"
+      ]
+    },
+    {
+      "id": "AP03-L0096",
+      "section": "2.2 Naming rules",
+      "line": 96,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Tokens MUST NOT begin with `$`.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > token rules: $ prefix, whitespace, control chars forbidden (§2.2)",
+        "src/test/properties.test.ts :: subject matcher laws (§2) > accepted tokens never contain dot, wildcard, whitespace, or $ prefix"
+      ]
+    },
+    {
+      "id": "AP03-L0097",
+      "section": "2.2 Naming rules",
+      "line": 97,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Tokens SHOULD use only `a`–`z`, `0`–`9`, `-`, `_`.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > token rules: $ prefix, whitespace, control chars forbidden (§2.2)"
+      ]
+    },
+    {
+      "id": "AP03-L0098",
+      "section": "2.2 Naming rules",
+      "line": 98,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Each token SHOULD be 1–63 characters; fully qualified subjects SHOULD stay under 256 characters.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §2.2 token length rule > conventional tokens are 1–63 chars"
+      ]
+    },
+    {
+      "id": "AP03-L0130",
+      "section": "2.4 Wildcard discovery",
+      "line": 130,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Full-form and abbreviated subject tokens do not cross-match under a NATS wildcard. A deployment SHOULD commit to one convention per `metadata.agent` value.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0136",
+      "section": "3. Service registration",
+      "line": 136,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Every agent MUST register as a NATS micro service using `@nats-io/services` or equivalent. Registration is the authoritative source for endpoint capability metadata and for enumeration via `$SRV.PING` / `$SRV.INFO`.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams",
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.PING.agents replies with a ping-shaped record",
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.INFO.agents.{instance_id} direct lookup replies with full service info"
+      ]
+    },
+    {
+      "id": "AP03-L0142",
+      "section": "3.1 Required service fields",
+      "line": 142,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `name`        | MUST be `agents`. Acts as the discovery filter that separates compliant agents from other NATS micro services.                                               |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > incompatible or non-compliant records are excluded; discovery uses $SRV.INFO.agents only"
+      ]
+    },
+    {
+      "id": "AP03-L0143",
+      "section": "3.1 Required service fields",
+      "line": 143,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `version`     | Semver of the harness implementation (not the protocol). Example: `1.4.0`.                                                                                  |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0144",
+      "section": "3.1 Required service fields",
+      "line": 144,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `description` | Human-readable description surfaced by `nats micro list` / `nats micro info`.                                                                               |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0145",
+      "section": "3.1 Required service fields",
+      "line": 145,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `metadata`    | Object. See §3.2.                                                                                                                                           |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0149",
+      "section": "3.2 Required service metadata",
+      "line": 149,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The service `metadata` object MUST include:",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0162",
+      "section": "3.2 Required service metadata",
+      "line": 162,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `agent`            | string | Yes                  | Canonical harness identifier (e.g. `claude-code`). The 3rd subject token MAY be an abbreviation of this value (§2).                                         |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0163",
+      "section": "3.2 Required service metadata",
+      "line": 163,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `owner`            | string | Yes                  | Operator / account. Matches the 4th subject token.                                                                                                          |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0164",
+      "section": "3.2 Required service metadata",
+      "line": 164,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `session`          | string | When session-aware   | Harness-specific session label. MUST be set for session-aware harnesses (`claude-code`, `pi`, `hermes`); MAY be omitted or set to `\"default\"` for session-less harnesses (`openclaw`). |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > §3.2/§8.3 session flows into metadata and heartbeat payload when configured"
+      ]
+    },
+    {
+      "id": "AP03-L0165",
+      "section": "3.2 Required service metadata",
+      "line": 165,
+      "kinds": [
+        "normative",
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `protocol_version` | string | Yes                  | Protocol version implemented. MUST match a MAJOR.MINOR value from §11.3.                                                                                    |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.1/§11.2 exact 0.3 accepted; patch and pre-release qualifiers ignored"
+      ]
+    },
+    {
+      "id": "AP03-L0169",
+      "section": "3.2 Required service metadata",
+      "line": 169,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Additional metadata keys MAY be included and MUST be preserved by tools that relay service info.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §3.2/§12 unknown metadata keys and endpoint names are preserved on the identity"
+      ]
+    },
+    {
+      "id": "AP03-L0173",
+      "section": "3.3 Queue group on the `prompt` endpoint",
+      "line": 173,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The `prompt` endpoint MUST be registered with a NATS queue group of `\"agents\"`. This:",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §3.3/§3.4 queue group load-balancing > two same-identity hosts: a prompt is handled by exactly one"
+      ]
+    },
+    {
+      "id": "AP03-L0184",
+      "section": "3.4 Multiple instances",
+      "line": 184,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Multiple physical instances of the same logical agent MAY register simultaneously. They share `agent`/`owner`/`name` identity, which yields identical endpoint subjects, and the `\"agents\"` queue group on the `prompt` endpoint (§3.3) causes the NATS micro service framework to load-balance requests across them.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3.3/§3.4 queue group load-balancing > two same-identity hosts: a prompt is handled by exactly one"
+      ]
+    },
+    {
+      "id": "AP03-L0188",
+      "section": "3.4 Multiple instances",
+      "line": 188,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Different instances of the same logical agent SHOULD expose identical endpoints and metadata.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0194",
+      "section": "4. Discovery",
+      "line": 194,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "The protocol defines exactly **two stable subjects** for discovery:",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > incompatible or non-compliant records are excluded; discovery uses $SRV.INFO.agents only",
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.PING.agents replies with a ping-shaped record",
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.INFO.agents.{instance_id} direct lookup replies with full service info"
+      ]
+    },
+    {
+      "id": "AP03-L0198",
+      "section": "4. Discovery",
+      "line": 198,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| General | `$SRV.PING.agents`               | Every compliant agent instance responds once.             |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.PING.agents replies with a ping-shaped record"
+      ]
+    },
+    {
+      "id": "AP03-L0199",
+      "section": "4. Discovery",
+      "line": 199,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| Direct  | `$SRV.INFO.agents.{instance_id}` | One specific instance responds with full service info.    |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.INFO.agents.{instance_id} direct lookup replies with full service info"
+      ]
+    },
+    {
+      "id": "AP03-L0201",
+      "section": "4. Discovery",
+      "line": 201,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Discovery returns each instance's endpoints with their subjects and metadata. Callers MUST use the `subject` field from the discovery record to address an endpoint - endpoint subjects are not protocol-fixed (§2) and cannot be reliably constructed from identity alone.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction"
+      ]
+    },
+    {
+      "id": "AP03-L0226",
+      "section": "4.3 Using a discovery record",
+      "line": 226,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "1. Reads `metadata.agent`, `metadata.owner`, optional `metadata.session`, and `metadata.protocol_version`.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0227",
+      "section": "4.3 Using a discovery record",
+      "line": 227,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "2. Locates the `prompt` endpoint by `name == \"prompt\"` and reads its `subject` and its metadata (`max_payload`, `attachments_ok`).",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams",
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction"
+      ]
+    },
+    {
+      "id": "AP03-L0228",
+      "section": "4.3 Using a discovery record",
+      "line": 228,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "3. Derives the instance name from the 4th token of the endpoint's `subject` when the subject follows the default pattern (§2); otherwise the instance name is taken from the agent's `metadata.session` or is opaque to the caller.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: subjects (Protocol §2) > parses verb-first identity tree"
+      ]
+    },
+    {
+      "id": "AP03-L0229",
+      "section": "4.3 Using a discovery record",
+      "line": 229,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "4. Enforces §5.4 validation using the endpoint metadata.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads",
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > attachments when attachments_ok=false fails locally",
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > oversize fails with actual > limit"
+      ]
+    },
+    {
+      "id": "AP03-L0230",
+      "section": "4.3 Using a discovery record",
+      "line": 230,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "5. Publishes requests to the endpoint's `subject` verbatim - no construction.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction"
+      ]
+    },
+    {
+      "id": "AP03-L0256",
+      "section": "5.1 Envelope shape",
+      "line": 256,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `prompt`      | string   | Yes      | UTF-8 prompt text. MUST be non-empty.                                                                                    |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > blank prompts map to EmptyPrompt in both encodings"
+      ]
+    },
+    {
+      "id": "AP03-L0257",
+      "section": "5.1 Envelope shape",
+      "line": 257,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `attachments` | object[] | No       | Zero or more attachment objects (§5.2). Agents with `attachments_ok: false` MUST reject a non-empty array with status `400` (§9). |",
+      "status": "covered",
+      "tests": [
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.1 attachments with attachments_ok=false → 400 · terminator, no ack",
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > attachments when attachments_ok=false fails locally"
+      ]
+    },
+    {
+      "id": "AP03-L0259",
+      "section": "5.1 Envelope shape",
+      "line": 259,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Additional top-level fields MAY appear; see §5.6.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.6 unknown top-level fields preserved",
+        "src/test/properties.test.ts :: parser totality (§5) > §5.6 encode∘parse identity: unknown fields survive at every level"
+      ]
+    },
+    {
+      "id": "AP03-L0269",
+      "section": "5.2 Attachments",
+      "line": 269,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `filename` | string | Yes      | Authoritative file name. Agents interpret the bytes by extension or content sniff.                                          |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0270",
+      "section": "5.2 Attachments",
+      "line": 270,
+      "kinds": [
+        "normative",
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `content`  | string | Yes      | Standard-alphabet, padded base64 (RFC 4648 §4). MUST NOT use URL-safe encoding and MUST NOT contain whitespace.             |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.2 non-standard base64 rejected",
+        "src/test/conformance-evidence.test.ts :: §5.2 base64 strictness > whitespace inside attachment content is rejected"
+      ]
+    },
+    {
+      "id": "AP03-L0278",
+      "section": "5.3 Discrimination rule",
+      "line": 278,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "1. Skips leading UTF-8 whitespace (`0x09`, `0x0A`, `0x0D`, `0x20`).",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.3 leading whitespace then { still discriminates as JSON",
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.3 plain text is promoted VERBATIM — no trimming"
+      ]
+    },
+    {
+      "id": "AP03-L0279",
+      "section": "5.3 Discrimination rule",
+      "line": 279,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "2. If the next byte is `{`, parses the remainder as JSON. If parsing fails, or the parsed object has no `prompt` string field, responds with status `400` (§9).",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.3 malformed JSON after { → MalformedJson",
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.3 object without prompt string → MissingPrompt",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6.4 malformed request: 400 error · terminator, NO ack"
+      ]
+    },
+    {
+      "id": "AP03-L0280",
+      "section": "5.3 Discrimination rule",
+      "line": 280,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "3. Otherwise, treats the original payload as UTF-8 text and promotes it to `{\"prompt\": <payload>}`.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > B.1 plain-text shorthand promotes to prompt",
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.3 plain text is promoted VERBATIM — no trimming"
+      ]
+    },
+    {
+      "id": "AP03-L0282",
+      "section": "5.3 Discrimination rule",
+      "line": 282,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "A zero-byte request payload is invalid and MUST be rejected with status `400`.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.1 zero-byte payload invalid",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6.4 malformed request: 400 error · terminator, NO ack"
+      ]
+    },
+    {
+      "id": "AP03-L0286",
+      "section": "5.4 Client-side validation",
+      "line": 286,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Before publishing, the caller MUST enforce the `prompt` endpoint's capability metadata (§2.1):",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads",
+        "src/test/host.test.ts :: client ⇄ host round trip > prompt against an endpoint without required metadata fails locally"
+      ]
+    },
+    {
+      "id": "AP03-L0288",
+      "section": "5.4 Client-side validation",
+      "line": 288,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "- If any attachment is present and `attachments_ok` is `false`, the caller MUST fail locally without publishing.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > attachments when attachments_ok=false fails locally",
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads"
+      ]
+    },
+    {
+      "id": "AP03-L0289",
+      "section": "5.4 Client-side validation",
+      "line": 289,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- The caller MUST compute the final encoded payload byte size and fail locally if it exceeds `max_payload`.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: local validation (Protocol §5.4) > oversize fails with actual > limit",
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads"
+      ]
+    },
+    {
+      "id": "AP03-L0291",
+      "section": "5.4 Client-side validation",
+      "line": 291,
+      "kinds": [
+        "normative"
+      ],
+      "text": "These local checks spare a round trip and agent-side resources. Agents MAY additionally enforce server-side and respond with `400`.",
+      "status": "covered",
+      "tests": [
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.1 attachments with attachments_ok=false → 400 · terminator, no ack",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.4 oversize request enforced server-side → 400 · terminator, no ack"
+      ]
+    },
+    {
+      "id": "AP03-L0301",
+      "section": "5.5 Future direction: artifact endpoint (≥ 0.3)",
+      "line": 301,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Precise wire format, chunking, lifetime, and reference-handoff semantics are deferred. v0.1 implementations SHOULD structure attachment handling so that adding the `attachments`-endpoint code path is additive, not a rewrite.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0305",
+      "section": "5.6 Unknown fields",
+      "line": 305,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Envelope decoders MUST tolerate unknown top-level fields and unknown fields inside attachment objects without error. They MUST preserve such fields when relaying.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.6 unknown top-level fields preserved",
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.6 unknown fields INSIDE attachments preserved",
+        "src/test/properties.test.ts :: parser totality (§5) > §5.6 encode∘parse identity: unknown fields survive at every level"
+      ]
+    },
+    {
+      "id": "AP03-L0336",
+      "section": "6.2 Chunk wrapper",
+      "line": 336,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `type` | string        | Yes      | Chunk discriminator. v0.1 defines `response`, `status`, `query` (§6.3–6.4, §7).       |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0337",
+      "section": "6.2 Chunk wrapper",
+      "line": 337,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `data` | string/object | Yes      | Chunk payload. Shape is determined by `type`.                                         |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0339",
+      "section": "6.2 Chunk wrapper",
+      "line": 339,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Plain-text shorthand is **not** accepted on the response side: every non-terminating chunk MUST be a JSON object with a `type` discriminator.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > non-JSON chunk is a protocol violation"
+      ]
+    },
+    {
+      "id": "AP03-L0341",
+      "section": "6.2 Chunk wrapper",
+      "line": 341,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Unknown chunk types MUST be silently ignored by callers, which continue consuming the stream (§6.6). Error responses use NATS micro service error headers instead of a typed chunk (§9).",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > §6.6 unknown chunk types decode as Unknown, not errors",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 every observed frame resets the gap timer — unknown chunks included"
+      ]
+    },
+    {
+      "id": "AP03-L0357",
+      "section": "6.3 `response` chunks",
+      "line": 357,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `text`        | string   | Yes*     | Response text. When `data` is a bare string, that string IS the text.                                  |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §6.3 response chunk forms > string and object data forms decode to the same text"
+      ]
+    },
+    {
+      "id": "AP03-L0358",
+      "section": "6.3 `response` chunks",
+      "line": 358,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `attachments` | object[] | No       | Optional attachments from the agent; shape per §5.2. Callers MAY ignore.                               |",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > §5.6 attachment extras survive chunk decode"
+      ]
+    },
+    {
+      "id": "AP03-L0362",
+      "section": "6.3 `response` chunks",
+      "line": 362,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Callers MUST accept both the string and object forms transparently. Multiple `response` chunks MAY be emitted; callers concatenate `text` values in publication order.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §6.3 response chunk forms > string and object data forms decode to the same text",
+        "src/test/conformance-evidence.test.ts :: §6.3/§6.6 publication order > multiple response chunks concatenate in publication order"
+      ]
+    },
+    {
+      "id": "AP03-L0376",
+      "section": "6.4 `status` chunks",
+      "line": 376,
+      "kinds": [
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `ack` | Acknowledges request acceptance. Resets the caller's inactivity timeout (§6.6).                                       |",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > ack + chunks + terminator yields the chunk sequence and ends",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 every observed frame resets the gap timer — unknown chunks included",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid"
+      ]
+    },
+    {
+      "id": "AP03-L0378",
+      "section": "6.4 `status` chunks",
+      "line": 378,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Agents MUST emit exactly one `ack` status chunk as the **first message** on the reply subject, before any `response` or `query` chunks and before any work that introduces observable latency (e.g. a model call). The ack confirms the request was received and resets the caller's inactivity timeout (§6.6) ahead of any warm-up gap. This also makes the stream observable from generic NATS tooling (e.g. `nats req --wait-for-empty`) which would otherwise time out on the warm-up gap.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > handler-emitted ack is dropped — the pump owns the single ack",
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > violations: no ack first, repeated ack, empty, post-terminator writes",
+        "src/test/properties.test.ts :: reply DFA model check (§6) > checker agrees with the reference regular language"
+      ]
+    },
+    {
+      "id": "AP03-L0380",
+      "section": "6.4 `status` chunks",
+      "line": 380,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Callers MUST silently ignore unrecognized status values.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §6.4 status handling (caller side) > unrecognized status values pass through without failing the stream"
+      ]
+    },
+    {
+      "id": "AP03-L0382",
+      "section": "6.4 `status` chunks",
+      "line": 382,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The terminal `done` is not a `status` chunk. The empty-payload terminator (§6.5) IS the done signal; SDKs MAY surface it to applications as a `status: done` event.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > ack + chunks + terminator yields the chunk sequence and ends",
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > accepted shape: ack · chunk* · terminator"
+      ]
+    },
+    {
+      "id": "AP03-L0386",
+      "section": "6.5 Stream termination",
+      "line": 386,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Every response stream MUST end with a **zero-byte body message carrying no NATS headers**. This is the uniform end-of-stream signal for all streams - successful or errored.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.5 zero-byte WITH headers is not a terminator",
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > accepted shape: ack · chunk* · terminator"
+      ]
+    },
+    {
+      "id": "AP03-L0388",
+      "section": "6.5 Stream termination",
+      "line": 388,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Agents MUST NOT publish further messages on the reply subject after the terminator.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > violations: no ack first, repeated ack, empty, post-terminator writes",
+        "src/test/properties.test.ts :: reply DFA model check (§6) > checker agrees with the reference regular language"
+      ]
+    },
+    {
+      "id": "AP03-L0398",
+      "section": "6.6 Ordering, delivery, forward compatibility",
+      "line": 398,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Chunks are delivered in publication order. NATS core messaging is at-most-once; individual chunks - including the terminator - MAY be lost silently.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §6.3/§6.6 publication order > multiple response chunks concatenate in publication order"
+      ]
+    },
+    {
+      "id": "AP03-L0400",
+      "section": "6.6 Ordering, delivery, forward compatibility",
+      "line": 400,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "To prevent indefinite hangs on a lost terminator, callers MUST apply a per-stream inactivity timeout. Recommended default: **60 seconds since the last observed chunk**. On timeout, the caller treats the stream as terminated with a transport error.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 gap just under the window passes; just over times out"
+      ]
+    },
+    {
+      "id": "AP03-L0404",
+      "section": "6.6 Ordering, delivery, forward compatibility",
+      "line": 404,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- MUST silently ignore chunks whose `type` is unrecognized.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > §6.6 unknown chunk types decode as Unknown, not errors",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 every observed frame resets the gap timer — unknown chunks included"
+      ]
+    },
+    {
+      "id": "AP03-L0405",
+      "section": "6.6 Ordering, delivery, forward compatibility",
+      "line": 405,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "- MUST tolerate unknown fields in `data` objects and preserve them when relaying.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §6.3 response chunk forms > §6.6 unknown fields inside data objects are preserved for relay"
+      ]
+    },
+    {
+      "id": "AP03-L0407",
+      "section": "6.6 Ordering, delivery, forward compatibility",
+      "line": 407,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Agents that require at-least-once delivery SHOULD wait for a future JetStream-backed pattern. v0.1 operates on core NATS only.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0415",
+      "section": "6.7 Cancellation",
+      "line": 415,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Agents producing expensive long-running work SHOULD use a mid-stream query as a liveness check if cancellation semantics matter.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0421",
+      "section": "7. Mid-stream queries",
+      "line": 421,
+      "kinds": [
+        "normative"
+      ],
+      "text": "An agent MAY pause its response stream to ask the caller a question - a permission prompt, a clarification, a menu selection. The response stream remains open; the caller publishes one reply to a fresh subject supplied by the agent; the agent resumes emitting chunks.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > decodes id, reply_subject, prompt; attachments optional",
+        "src/test/conformance-evidence.test.ts :: §7.2 query replies > answerQuery publishes exactly one §5.1-shaped payload to reply_subject"
+      ]
+    },
+    {
+      "id": "AP03-L0438",
+      "section": "7.1 Query chunk",
+      "line": 438,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `id`            | string   | Yes      | Opaque correlation identifier. SHOULD be a UUID.                                                 |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > decodes id, reply_subject, prompt; attachments optional"
+      ]
+    },
+    {
+      "id": "AP03-L0439",
+      "section": "7.1 Query chunk",
+      "line": 439,
+      "kinds": [
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| `reply_subject` | string   | Yes      | A fresh NATS subject (typically `_INBOX.xxx`) on which the agent expects exactly one reply.      |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > decodes id, reply_subject, prompt; attachments optional",
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > missing reply_subject is a malformed known chunk"
+      ]
+    },
+    {
+      "id": "AP03-L0440",
+      "section": "7.1 Query chunk",
+      "line": 440,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `prompt`        | string   | Yes      | The question text presented to the caller.                                                       |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > decodes id, reply_subject, prompt; attachments optional"
+      ]
+    },
+    {
+      "id": "AP03-L0441",
+      "section": "7.1 Query chunk",
+      "line": 441,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `attachments`   | object[] | No       | Optional attachments; same shape as §5.2.                                                         |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.1 query chunks > decodes id, reply_subject, prompt; attachments optional"
+      ]
+    },
+    {
+      "id": "AP03-L0445",
+      "section": "7.2 Reply",
+      "line": 445,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "The caller publishes exactly one message to `reply_subject`. Payload follows §5.1 - plain UTF-8 text, or a JSON envelope with `prompt` + optional `attachments`. No acknowledgment is defined.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §7.2 query replies > answerQuery publishes exactly one §5.1-shaped payload to reply_subject"
+      ]
+    },
+    {
+      "id": "AP03-L0454",
+      "section": "7.3 Lifecycle",
+      "line": 454,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- If the caller does not reply within the timeout, the agent MAY either (a) terminate the stream with an error per §9, or (b) proceed with a harness-defined default and continue emitting chunks. In case (b), the caller receives no signal.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0455",
+      "section": "7.3 Lifecycle",
+      "line": 455,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Multiple query chunks MAY be in flight concurrently within a single response stream. Each MUST use a distinct `reply_subject`.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0462",
+      "section": "8. Heartbeat",
+      "line": 462,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Agents MUST publish a periodic heartbeat so callers can track liveness without polling. Heartbeats are pub/sub (fire-and-forget); there is no reply.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder"
+      ]
+    },
+    {
+      "id": "AP03-L0476",
+      "section": "8.2 Cadence",
+      "line": 476,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Each instance chooses its own interval, configurable at SDK construction time. Recommended default: **30 seconds**. Values below 1 second SHOULD NOT be used on shared infrastructure.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0480",
+      "section": "8.2 Cadence",
+      "line": 480,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Agents SHOULD begin publishing heartbeats only after service registration is complete, so that callers discovering the agent via `$SRV.INFO` find its metadata.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0497",
+      "section": "8.3 Payload",
+      "line": 497,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `agent`       | string | Yes                | Matches `metadata.agent`.                                                                                              |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0498",
+      "section": "8.3 Payload",
+      "line": 498,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `owner`       | string | Yes                | Matches `metadata.owner`.                                                                                              |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0499",
+      "section": "8.3 Payload",
+      "line": 499,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `session`     | string | When session-aware | Matches `metadata.session`. Present iff the metadata field is set.                                                     |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > §3.2/§8.3 session flows into metadata and heartbeat payload when configured",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0500",
+      "section": "8.3 Payload",
+      "line": 500,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `instance_id` | string | Yes                | The micro service framework's per-instance identifier. Matches the service `id`.                                       |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0501",
+      "section": "8.3 Payload",
+      "line": 501,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `ts`          | string | Yes                | UTC ISO 8601 timestamp of publication.                                                                                 |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0502",
+      "section": "8.3 Payload",
+      "line": 502,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `interval_s`  | number | Yes                | This instance's cadence in seconds. > 0; recommended ≥ 1.                                                              |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset",
+        "src/test/robustness.test.ts :: liveness hygiene > §8.3 beats with non-positive interval_s are ignored by the tracker"
+      ]
+    },
+    {
+      "id": "AP03-L0506",
+      "section": "8.3 Payload",
+      "line": 506,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Callers MUST tolerate additional unknown fields.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §8.3 heartbeat decoding > callers tolerate additional unknown heartbeat fields"
+      ]
+    },
+    {
+      "id": "AP03-L0510",
+      "section": "8.4 On-demand reachability",
+      "line": 510,
+      "kinds": [
+        "normative"
+      ],
+      "text": "For point-in-time reachability, callers SHOULD use the micro service ping instead of waiting for the next heartbeat:",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0520",
+      "section": "8.5 Subscribe-before-discover",
+      "line": 520,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "To avoid a race between enumeration and the first heartbeat, callers SHOULD subscribe to the heartbeat wildcard (`agents.hb.*.*.*`, scoped as narrowly as needed) **before** sending their first `$SRV.PING.agents`.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > liveness flips off after 3× the declared interval (§8.2)",
+        "src/test/host.test.ts :: client ⇄ host round trip > independent heartbeat subscribers both observe beats"
+      ]
+    },
+    {
+      "id": "AP03-L0528",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 528,
+      "kinds": [
+        "normative"
+      ],
+      "text": "In addition to the periodic pub/sub heartbeat (§8.1–§8.3), every agent MUST expose a `status` endpoint:",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8.7.1 status endpoint replies from the same builder",
+        "src/test/conformance-evidence.test.ts :: §8.7 status endpoint > ignores a non-empty request body and replies exactly §8.3-shaped"
+      ]
+    },
+    {
+      "id": "AP03-L0532",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 532,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| Endpoint name    | `status`                                                                 |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0533",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 533,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| Default subject  | `agents.status.{agent}.{owner}.{name}`                                   |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0534",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 534,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| Queue group      | `\"agents\"` (same as `prompt`; see §3.3 — load-balances across same-identity instances) |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0535",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 535,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| Request body     | Reserved. Agents MUST currently ignore the request body. Future revisions MAY define a request schema. |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §8.7 status endpoint > ignores a non-empty request body and replies exactly §8.3-shaped"
+      ]
+    },
+    {
+      "id": "AP03-L0536",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 536,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| Reply body       | A §8.3 heartbeat-shaped JSON payload, freshly built per request.         |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §8.7 status endpoint > ignores a non-empty request body and replies exactly §8.3-shaped",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8.7.1 status endpoint replies from the same builder"
+      ]
+    },
+    {
+      "id": "AP03-L0538",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 538,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "The reply payload uses **exactly the §8.3 schema** — same `agent`, `owner`, optional `session`, `instance_id`, `ts`, `interval_s` fields. Receivers MAY treat a status reply as if it were a just-arrived heartbeat: feed it into the same liveness tracker, key on `instance_id`, etc.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §8.7 status endpoint > ignores a non-empty request body and replies exactly §8.3-shaped"
+      ]
+    },
+    {
+      "id": "AP03-L0542",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 542,
+      "kinds": [
+        "procedure"
+      ],
+      "text": "1. **Bootstrap a tracker without waiting a full heartbeat interval.** A caller that just connected and wants point-in-time liveness for a known instance can `nats req agents.status.{agent}.{owner}.{name} ''` instead of waiting up to `interval_s` for the next pub/sub beat to arrive.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0543",
+      "section": "8.7 Status endpoint (request/reply)",
+      "line": 543,
+      "kinds": [
+        "normative",
+        "procedure"
+      ],
+      "text": "2. **Future agent-state queries.** Subsequent revisions MAY extend the reply payload with richer agent metadata (cost so far, queue depth, capability hints, ...). Sourcing the reply from the same builder used for periodic heartbeats keeps the two streams in lockstep.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0547",
+      "section": "8.7.1 Implementation notes",
+      "line": 547,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Agents SHOULD source the reply payload from the same builder used to construct periodic heartbeats so the two emit identical values for fields they share.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8.7.1 status endpoint replies from the same builder",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder"
+      ]
+    },
+    {
+      "id": "AP03-L0548",
+      "section": "8.7.1 Implementation notes",
+      "line": 548,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- A `respond` failure (broker dropped, request reply already torn down) is best-effort — agents MAY swallow it and continue serving.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0549",
+      "section": "8.7.1 Implementation notes",
+      "line": 549,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- An exception thrown while constructing the payload MUST be returned as a `Nats-Service-Error-Code: 500` response (see §9), not propagated into the framework's default handling.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0564",
+      "section": "9.1 Wire shape",
+      "line": 564,
+      "kinds": [
+        "normative"
+      ],
+      "text": "The body MAY be empty, or MAY carry a JSON object with richer context:",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > JSON body `message` is preferred over the Nats-Service-Error header",
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > empty body falls back to the header; headers checked before body"
+      ]
+    },
+    {
+      "id": "AP03-L0576",
+      "section": "9.1 Wire shape",
+      "line": 576,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `error`   | string | Yes (if body is JSON) | Stable machine-readable error code. Lowercase snake_case recommended.                           |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9 host error emission > §9.1 400 rejection body carries snake_case error code and message"
+      ]
+    },
+    {
+      "id": "AP03-L0577",
+      "section": "9.1 Wire shape",
+      "line": 577,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `message` | string | No                    | Human-readable detail. If absent, callers fall back to the `Nats-Service-Error` header.         |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > JSON body `message` is preferred over the Nats-Service-Error header",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §9 error headers fail the stream typed, checked before body"
+      ]
+    },
+    {
+      "id": "AP03-L0578",
+      "section": "9.1 Wire shape",
+      "line": 578,
+      "kinds": [
+        "normative",
+        "wire-table",
+        "exactness"
+      ],
+      "text": "| (other)   | any    | No                    | Additional fields MAY be included. Callers MUST tolerate unknown fields.                        |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > JSON body `message` is preferred over the Nats-Service-Error header"
+      ]
+    },
+    {
+      "id": "AP03-L0580",
+      "section": "9.1 Wire shape",
+      "line": 580,
+      "kinds": [
+        "normative"
+      ],
+      "text": "If the body is empty or not valid JSON, callers MUST use the `Nats-Service-Error` header as the description.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §9 error headers fail the stream typed, checked before body",
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > empty body falls back to the header; headers checked before body"
+      ]
+    },
+    {
+      "id": "AP03-L0586",
+      "section": "9.2 Status code taxonomy",
+      "line": 586,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 400  | Malformed request: invalid envelope, empty payload, invalid base64, attachments sent when `attachments_ok=false`, request exceeds `max_payload`.   |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6.4 malformed request: 400 error · terminator, NO ack",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.1 attachments with attachments_ok=false → 400 · terminator, no ack",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.4 oversize request enforced server-side → 400 · terminator, no ack"
+      ]
+    },
+    {
+      "id": "AP03-L0587",
+      "section": "9.2 Status code taxonomy",
+      "line": 587,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 401  | Authentication required. (NATS usually enforces at connect time.)                                                                                   |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0588",
+      "section": "9.2 Status code taxonomy",
+      "line": 588,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 403  | Forbidden: caller authenticated but not authorized.                                                                                                 |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §9.3 handler failure: ack · error · terminator with the declared code",
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0589",
+      "section": "9.2 Status code taxonomy",
+      "line": 589,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 404  | Not found.                                                                                                                                          |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0590",
+      "section": "9.2 Status code taxonomy",
+      "line": 590,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 409  | Conflict: request conflicts with current agent state.                                                                                               |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0591",
+      "section": "9.2 Status code taxonomy",
+      "line": 591,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 429  | Rate limited.                                                                                                                                       |",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6 overflow: second concurrent prompt gets 429 · terminator",
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0592",
+      "section": "9.2 Status code taxonomy",
+      "line": 592,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| 500  | Internal error.                                                                                                                                     |",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9 host error emission > §9.2 handler-declared codes outside the taxonomy degrade to 500",
+        "src/test/conformance-evidence.test.ts :: §9.2 status code taxonomy > all seven codes are pinned"
+      ]
+    },
+    {
+      "id": "AP03-L0594",
+      "section": "9.2 Status code taxonomy",
+      "line": 594,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Agents MUST use codes from this table. Future revisions will add new codes but not reuse existing ones with new meanings.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §9 host error emission > §9.2 handler-declared codes outside the taxonomy degrade to 500",
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > error taxonomy covers Protocol §9.2 codes"
+      ]
+    },
+    {
+      "id": "AP03-L0598",
+      "section": "9.3 Errors during a stream",
+      "line": 598,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "An error mid-stream is an error-headered message (with optional JSON body per §9.1) published to the reply subject, followed by the empty terminator (§6.5). This applies whether the error occurs before any content or partway through. Error-terminated streams always end with two messages: error-headered, then empty terminator.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §9.3 handler failure: ack · error · terminator with the declared code",
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > §9.3 error after acceptance: ack · chunk* · error · terminator"
+      ]
+    },
+    {
+      "id": "AP03-L0600",
+      "section": "9.3 Errors during a stream",
+      "line": 600,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Agents MUST NOT publish further messages on the reply subject after the terminator.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > violations: no ack first, repeated ack, empty, post-terminator writes",
+        "src/test/properties.test.ts :: reply DFA model check (§6) > checker agrees with the reference regular language"
+      ]
+    },
+    {
+      "id": "AP03-L0612",
+      "section": "10.1 Authentication and authorization",
+      "line": 612,
+      "kinds": [
+        "normative"
+      ],
+      "text": "- Deployments SHOULD use NATS accounts and subject permissions to isolate agents by tenant or environment.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0618",
+      "section": "10.2 Credential management",
+      "line": 618,
+      "kinds": [
+        "normative"
+      ],
+      "text": "Agents and callers SHOULD support NATS CLI contexts (`~/.config/nats/context/<name>.json`) for connection configuration.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0628",
+      "section": "11.1 Version string format",
+      "line": 628,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "MAJOR.MINOR strings (e.g. `\"0.1\"`, `\"1.0\"`). Patch/pre-release qualifiers MAY be present but have no compatibility meaning - callers MUST compare only the MAJOR.MINOR prefix.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.1/§11.2 exact 0.3 accepted; patch and pre-release qualifiers ignored",
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.2 0.x pins to exact MINOR; different MAJOR and malformed rejected"
+      ]
+    },
+    {
+      "id": "AP03-L0632",
+      "section": "11.2 Compatibility rules",
+      "line": 632,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "- **Same MAJOR.MINOR**: full interoperability.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.1/§11.2 exact 0.3 accepted; patch and pre-release qualifiers ignored",
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0633",
+      "section": "11.2 Compatibility rules",
+      "line": 633,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "- **Same MAJOR, different MINOR**: callers SHOULD treat the agent as compatible for the caller's MINOR feature set and rely on forward-compat escape hatches (§5.6 unknown fields, §6.6 unknown chunk types).",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0636",
+      "section": "11.2 Compatibility rules",
+      "line": 636,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "The 0.x line is explicitly unstable. MINOR bumps within 0.x MAY break compatibility; callers SHOULD pin to an exact MAJOR.MINOR until 1.0.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.2 0.x pins to exact MINOR; different MAJOR and malformed rejected",
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > incompatible or non-compliant records are excluded; discovery uses $SRV.INFO.agents only"
+      ]
+    },
+    {
+      "id": "AP03-L0642",
+      "section": "11.3 Known versions",
+      "line": 642,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `0.3`   | Draft      | This document. Verb-first subject hierarchy (§2 — `agents.{verb}.{a}.{o}.{n}`); heartbeat moves to `agents.hb.{a}.{o}.{n}` (§8.1); new `status` request/reply endpoint (§8.7) replies with the §8.3 heartbeat shape. Not wire-compatible with 0.2 — the prompt subject changed. |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0643",
+      "section": "11.3 Known versions",
+      "line": 643,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `0.2`   | Superseded | Subject hierarchy was `agents.{a}.{o}.{n}` (4 tokens, no verb); heartbeat at `agents.{a}.{o}.{n}.heartbeat`; no `status` endpoint. |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0644",
+      "section": "11.3 Known versions",
+      "line": 644,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `0.1`   | Superseded | Earliest draft — service name was `Synadia Agents`, no required queue group on the `prompt` endpoint. Not wire-compatible with 0.2. |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0652",
+      "section": "12. Implementation checklist",
+      "line": 652,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Registers as a NATS micro service with `name = \"agents\"`.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0653",
+      "section": "12. Implementation checklist",
+      "line": 653,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Declares `metadata.agent`, `metadata.owner`, `metadata.protocol_version = \"0.3\"`; adds `metadata.session` when session-aware.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > §3.2/§8.3 session flows into metadata and heartbeat payload when configured"
+      ]
+    },
+    {
+      "id": "AP03-L0654",
+      "section": "12. Implementation checklist",
+      "line": 654,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Registers an endpoint named `prompt` with queue group `\"agents\"` (§3.3) and endpoint metadata `max_payload` and `attachments_ok`. The endpoint's `subject` is agent-chosen; the recommended default (used by channel plugins) is `agents.prompt.{agent}.{owner}.{name}` (§2 verb-first).",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12"
+      ]
+    },
+    {
+      "id": "AP03-L0655",
+      "section": "12. Implementation checklist",
+      "line": 655,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Registers an endpoint named `status` with queue group `\"agents\"` (§8.7). Default subject `agents.status.{agent}.{owner}.{name}`. Replies with a §8.3 heartbeat-shaped payload.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §3 service registration shape > service info: name, metadata, endpoint names/subjects/queue groups per §2/§3/§12",
+        "src/test/conformance-evidence.test.ts :: §8.7 status endpoint > ignores a non-empty request body and replies exactly §8.3-shaped"
+      ]
+    },
+    {
+      "id": "AP03-L0656",
+      "section": "12. Implementation checklist",
+      "line": 656,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- On the `prompt` endpoint:",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0657",
+      "section": "12. Implementation checklist",
+      "line": 657,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Accepts both JSON envelopes and the plain-text shorthand (§5).",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/conformance-evidence.test.ts :: §5.6 host passes unknown envelope fields through > handler observes top-level extras from a raw JSON request"
+      ]
+    },
+    {
+      "id": "AP03-L0658",
+      "section": "12. Implementation checklist",
+      "line": 658,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Rejects malformed envelopes, empty payloads, invalid base64, oversize requests, and attachments-when-`attachments_ok=false` with status `400`.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6.4 malformed request: 400 error · terminator, NO ack",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.1 attachments with attachments_ok=false → 400 · terminator, no ack",
+        "src/test/robustness.test.ts :: host-side MUST enforcement > §5.4 oversize request enforced server-side → 400 · terminator, no ack"
+      ]
+    },
+    {
+      "id": "AP03-L0659",
+      "section": "12. Implementation checklist",
+      "line": 659,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Tolerates and preserves unknown envelope fields.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §5.6 host passes unknown envelope fields through > handler observes top-level extras from a raw JSON request",
+        "src/test/protocol.test.ts :: request envelope (Protocol §5) > §5.6 unknown top-level fields preserved"
+      ]
+    },
+    {
+      "id": "AP03-L0660",
+      "section": "12. Implementation checklist",
+      "line": 660,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Emits an `{type:\"status\",data:\"ack\"}` chunk as the first message on the reply subject, before any `response`/`query` chunk and before any latency-inducing work (§6.4).",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > handler-emitted ack is dropped — the pump owns the single ack"
+      ]
+    },
+    {
+      "id": "AP03-L0661",
+      "section": "12. Implementation checklist",
+      "line": 661,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Emits response streams per §6: typed `{type, data}` chunks in publication order, terminated by a zero-byte headerless message. Errors precede the terminator with error headers.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §9.3 handler failure: ack · error · terminator with the declared code"
+      ]
+    },
+    {
+      "id": "AP03-L0662",
+      "section": "12. Implementation checklist",
+      "line": 662,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Publishes heartbeats on `agents.hb.{agent}.{owner}.{name}` at its configured cadence with all §8.3 fields.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §8 heartbeats publish on schedule from the shared builder",
+        "src/test/conformance-evidence.test.ts :: §8 heartbeat payload > §8.3 ts is UTC ISO 8601, interval_s matches config, session absent when unset"
+      ]
+    },
+    {
+      "id": "AP03-L0663",
+      "section": "12. Implementation checklist",
+      "line": 663,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Responds to `$SRV.PING.agents` and `$SRV.INFO.agents` via the micro service framework.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.PING.agents replies with a ping-shaped record",
+        "src/test/conformance-evidence.test.ts :: §4 / §12 $SRV responders > $SRV.INFO.agents.{instance_id} direct lookup replies with full service info",
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams"
+      ]
+    },
+    {
+      "id": "AP03-L0664",
+      "section": "12. Implementation checklist",
+      "line": 664,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- If it issues mid-stream queries: conforms to §7.",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0665",
+      "section": "12. Implementation checklist",
+      "line": 665,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Uses `respondError` per §9 for errors; `Nats-Service-Error-Code` is set from the §9.2 taxonomy.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6.4 malformed request: 400 error · terminator, NO ack",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > §6 overflow: second concurrent prompt gets 429 · terminator",
+        "src/test/conformance-evidence.test.ts :: §9 host error emission > §9.2 handler-declared codes outside the taxonomy degrade to 500"
+      ]
+    },
+    {
+      "id": "AP03-L0669",
+      "section": "12. Implementation checklist",
+      "line": 669,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Performs discovery only via `$SRV.PING.agents` and `$SRV.INFO.agents[.{instance_id}]`.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > incompatible or non-compliant records are excluded; discovery uses $SRV.INFO.agents only"
+      ]
+    },
+    {
+      "id": "AP03-L0670",
+      "section": "12. Implementation checklist",
+      "line": 670,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Reads each instance's `metadata.protocol_version` and applies §11.2 compatibility rules.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > incompatible or non-compliant records are excluded; discovery uses $SRV.INFO.agents only",
+        "src/test/conformance-evidence.test.ts :: §11 protocol version compatibility > §11.2 0.x pins to exact MINOR; different MAJOR and malformed rejected"
+      ]
+    },
+    {
+      "id": "AP03-L0671",
+      "section": "12. Implementation checklist",
+      "line": 671,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Locates the `prompt` endpoint by `endpoints[].name == \"prompt\"`, reads its metadata, and enforces `max_payload` / `attachments_ok` locally before publishing (§5.4).",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > discover finds the host with required metadata, then prompt streams",
+        "src/test/host.test.ts :: client ⇄ host round trip > §5.4 local validation blocks the wire on oversize payloads",
+        "src/test/host.test.ts :: client ⇄ host round trip > prompt against an endpoint without required metadata fails locally"
+      ]
+    },
+    {
+      "id": "AP03-L0672",
+      "section": "12. Implementation checklist",
+      "line": 672,
+      "kinds": [
+        "normative",
+        "checklist"
+      ],
+      "text": "- Publishes to the `prompt` endpoint's `subject` as reported by `$SRV.INFO.agents`. MUST NOT construct the subject from identity alone.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §4.3/§12 the client publishes to the advertised subject verbatim — no construction"
+      ]
+    },
+    {
+      "id": "AP03-L0673",
+      "section": "12. Implementation checklist",
+      "line": 673,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Subscribes to an appropriate heartbeat wildcard **before** initial `$SRV.PING.agents`.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > liveness flips off after 3× the declared interval (§8.2)",
+        "src/test/host.test.ts :: client ⇄ host round trip > independent heartbeat subscribers both observe beats"
+      ]
+    },
+    {
+      "id": "AP03-L0674",
+      "section": "12. Implementation checklist",
+      "line": 674,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Applies a per-stream inactivity timeout (§6.6).",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 gap just under the window passes; just over times out"
+      ]
+    },
+    {
+      "id": "AP03-L0675",
+      "section": "12. Implementation checklist",
+      "line": 675,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Inspects NATS headers (`Nats-Service-Error-Code`) on every received message before interpreting the body.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §9 error headers fail the stream typed, checked before body",
+        "src/test/conformance-evidence.test.ts :: §9.1 error wire shape (caller side) > empty body falls back to the header; headers checked before body"
+      ]
+    },
+    {
+      "id": "AP03-L0676",
+      "section": "12. Implementation checklist",
+      "line": 676,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Treats a zero-byte body with no NATS headers as stream termination (§6.5).",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.5 zero-byte WITH headers is not a terminator",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > ack + chunks + terminator yields the chunk sequence and ends"
+      ]
+    },
+    {
+      "id": "AP03-L0677",
+      "section": "12. Implementation checklist",
+      "line": 677,
+      "kinds": [
+        "checklist",
+        "exactness"
+      ],
+      "text": "- Silently ignores unknown chunk types, unknown endpoint names, and unknown metadata keys.",
+      "status": "covered",
+      "tests": [
+        "src/test/protocol.test.ts :: stream model (Protocol §6, §9) > §6.6 unknown chunk types decode as Unknown, not errors",
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §3.2/§12 unknown metadata keys and endpoint names are preserved on the identity",
+        "src/test/conformance-evidence.test.ts :: §6.4 status handling (caller side) > unrecognized status values pass through without failing the stream"
+      ]
+    },
+    {
+      "id": "AP03-L0678",
+      "section": "12. Implementation checklist",
+      "line": 678,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Preserves unknown metadata fields when relaying.",
+      "status": "covered",
+      "tests": [
+        "src/test/conformance-evidence.test.ts :: §4/§11.2 discovery filtering > §3.2/§12 unknown metadata keys and endpoint names are preserved on the identity"
+      ]
+    },
+    {
+      "id": "AP03-L0679",
+      "section": "12. Implementation checklist",
+      "line": 679,
+      "kinds": [
+        "checklist"
+      ],
+      "text": "- Tracks liveness per `instance_id` (§8.1).",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: client ⇄ host round trip > liveness flips off after 3× the declared interval (§8.2)",
+        "src/test/robustness.test.ts :: liveness hygiene > §8.3 beats with non-positive interval_s are ignored by the tracker"
+      ]
+    },
+    {
+      "id": "AP03-L0762",
+      "section": "B.6 Status chunk - `ack`",
+      "line": 762,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "The mandatory first chunk on every response stream (§6.4). Confirms request acceptance and resets the caller's inactivity timeout (§6.6). The stream continues with `response` chunks.",
+      "status": "covered",
+      "tests": [
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid",
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.6 every observed frame resets the gap timer — unknown chunks included"
+      ]
+    },
+    {
+      "id": "AP03-L0782",
+      "section": "B.9 Empty-payload terminator",
+      "line": 782,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "- Zero-byte body.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > ack + chunks + terminator yields the chunk sequence and ends",
+        "src/test/host.test.ts :: host pump (Protocol §6, §9) > accepted prompt produces ack · chunks · terminator — DFA-valid"
+      ]
+    },
+    {
+      "id": "AP03-L0783",
+      "section": "B.9 Empty-payload terminator",
+      "line": 783,
+      "kinds": [
+        "exactness"
+      ],
+      "text": "- No NATS headers.",
+      "status": "covered",
+      "tests": [
+        "src/test/prompt-engine.test.ts :: prompt engine (Protocol §6) > §6.5 zero-byte WITH headers is not a terminator"
+      ]
+    },
+    {
+      "id": "AP03-L0871",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 871,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `claude-code`    | `cc`                 | Anthropic's Claude Code CLI  | Session-aware. Each session SHOULD be its own registration; `metadata.session` carries the label.           |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0872",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 872,
+      "kinds": [
+        "normative",
+        "wire-table"
+      ],
+      "text": "| `openclaw`       | `oc`                 | OpenClaw agent runtime       | Session-less. `metadata.session` MAY be omitted or set to `\"default\"`. Instance name often `default`.       |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0873",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 873,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `pi`             | `pi`                 | `pi` agent harness           | Session-aware. Same convention as `claude-code`.                                                            |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0874",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 874,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `hermes`         | `hermes`             | Hermes agent harness         | Session-aware. Same convention as `claude-code`.                                                            |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0875",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 875,
+      "kinds": [
+        "wire-table"
+      ],
+      "text": "| `dspy`           | `dspy`               | DSPy / ax-llm ReAct agent    | Session-aware. Same convention as `claude-code`.                                                            |",
+      "status": "informative",
+      "tests": []
+    },
+    {
+      "id": "AP03-L0877",
+      "section": "Appendix C: Known agent identifiers (informative)",
+      "line": 877,
+      "kinds": [
+        "normative",
+        "exactness"
+      ],
+      "text": "Additions to this table are non-normative; deployers SHOULD coordinate before claiming a new identifier to avoid collisions.",
+      "status": "informative",
+      "tests": []
+    }
+  ]
+}

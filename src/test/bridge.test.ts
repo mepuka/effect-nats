@@ -1,6 +1,7 @@
 /**
  * Bridge tests — the deployment obligations from notes/0003/0005.
- * Each test names the Lean fact it mirrors; agreement here is evidence for
+ * Each test names the theorem it mirrors in the proved companion package
+ * (github.com/mepuka/effect-nats-lean); agreement here is evidence for
  * (not proof of) TS ⟷ Lean conformance.
  */
 import { describe, expect, test } from "bun:test"
@@ -77,7 +78,7 @@ describe("subjects", () => {
     const exact = mkSubject(["orders", "created"])
     if (exact === null) throw new Error("unreachable")
     const pattern = {
-      toks: exact.map((t) => ({ _tag: "lit" as const, value: t })),
+      toks: exact.tokens.map((t) => ({ _tag: "lit" as const, value: t })),
       gt: false,
     }
     expect(matchSubject(["orders", "created"], pattern)).toBe(true)
@@ -93,7 +94,7 @@ describe("registry", () => {
     const registry = new Registry()
     const ok = issue(registry, ["orders", "created"], UserCreated)
     if ("_tag" in ok) throw new Error(`expected success: ${JSON.stringify(ok)}`)
-    expect(ok.join(".")).toBe("orders.created")
+    expect(ok.name).toBe("orders.created")
 
     const collision = issue(registry, ["orders", "created"], DeviceEvent)
     expect("_tag" in collision && collision._tag).toBe("collision")

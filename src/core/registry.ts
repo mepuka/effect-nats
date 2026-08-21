@@ -8,7 +8,7 @@
  * subject would be indistinguishable on the wire.
  */
 import type { Schema } from "effect"
-import { mkSubject, type Subject } from "./subjects.js"
+import { mkSubject, type AllWf, type Subject } from "./subjects.js"
 
 export type RegistryError =
   | { readonly _tag: "collision"; readonly subject: string }
@@ -28,9 +28,8 @@ export class Registry {
   ): RegistryError | null {
     const subject = mkSubject(tokens)
     if (subject === null) return { _tag: "badSubject", tokens }
-    const name = subject.join(".")
-    if (this.bySubject.has(name)) return { _tag: "collision", subject: name }
-    this.bySubject.set(name, schema)
+    if (this.bySubject.has(subject.name)) return { _tag: "collision", subject: subject.name }
+    this.bySubject.set(subject.name, schema)
     return null
   }
 
@@ -47,15 +46,28 @@ export class Registry {
 declare const RegisteredBrand: unique symbol
 
 /** Typed publish target: only subjects this registry issued satisfy this. */
-export type RegisteredSubject = Subject & { readonly [RegisteredBrand]: "Registered" }
+export type RegisteredSubject<Tokens extends readonly string[] = []> = Subject<Tokens> & {
+  readonly [RegisteredBrand]: "Registered"
+}
+
+/**
+ * Refined success type only for validated literal tuples; dynamic token
+ * arrays (`AllWf` = `boolean`) get the honest runtime union — registration
+ * of unchecked input can always fail, and the types must say so.
+ */
+export type IssueResult<Tokens extends readonly string[]> = [AllWf<Tokens>] extends [true]
+  ? RegisteredSubject<Tokens>
+  : [AllWf<Tokens>] extends [false]
+    ? RegistryError
+    : RegisteredSubject<Tokens> | RegistryError
 
 /** Register and, on success, get back the typed publish target. */
-export const issue = (
+export const issue = <const Tokens extends readonly string[]>(
   registry: Registry,
-  tokens: readonly string[],
+  tokens: Tokens,
   schema: Schema.Constraint,
-): RegisteredSubject | RegistryError => {
+): IssueResult<Tokens> => {
   const err = registry.register(tokens, schema)
-  if (err !== null) return err
-  return mkSubject(tokens) as RegisteredSubject
+  if (err !== null) return err as IssueResult<Tokens>
+  return mkSubject(tokens) as unknown as IssueResult<Tokens>
 }

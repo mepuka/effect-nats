@@ -15,6 +15,7 @@ import {
   Context,
   Effect,
   Layer,
+  Option,
   PubSub,
   Ref,
   Schema,
@@ -27,6 +28,16 @@ import type { Subject } from "../core/subjects.js"
 export class PublishError extends Schema.TaggedError<PublishError>()(
   "effect-nats-jetstream/PublishError",
   { subject: Schema.String },
+) {}
+
+/** CAS failure: someone else wrote `key` between our read and write. */
+export class KvConflict extends Schema.TaggedError<KvConflict>()(
+  "effect-nats-jetstream/KvConflict",
+  {
+    key: Schema.String,
+    expectedRevision: Schema.Number,
+    actualRevision: Schema.Number,
+  },
 ) {}
 
 export interface PubAck {
@@ -119,9 +130,38 @@ export class Nats extends Context.Service<Nats, NatsShape>()("effect-nats-jetstr
        */
       const tap = (): Stream.Stream<Published> => Stream.fromPubSub(inbox)
 
+      // -- KV: one revision counter per key, CAS by expected revision --------
+      const store = new Map<string, KvEntry>()
+      const kvGet = (key: string): Effect.Effect<Option.Option<KvEntry>> =>
+        Effect.sync(() => Option.fromNullishOr(store.get(key)))
+      const kvPut = (
+        key: string,
+        expectedRevision: number,
+        payload: string,
+      ): Effect.Effect<number, KvConflict> =>
+        Effect.suspend(() => {
+          const actual = store.get(key)?.revision ?? 0
+          if (actual !== expectedRevision) {
+            return Effect.fail(
+              new KvConflict({ key, expectedRevision, actualRevision: actual }),
+            )
+          }
+          const revision = actual + 1
+          store.set(key, { revision, payload })
+          return Effect.succeed(revision)
+        })
+
       const model: Effect.Effect<ServerModel> = Ref.get(state)
 
-      return Nats.of({ corePublish, jsPublish, jsPublishDedup, tap, model })
+      return Nats.of({
+        corePublish,
+        jsPublish,
+        jsPublishDedup,
+        tap,
+        model,
+        kvGet,
+        kvPut,
+      })
     }),
   )
 }
@@ -141,4 +181,20 @@ export interface NatsShape {
   readonly tap: () => Stream.Stream<Published>
   /** Simulator inspection — not part of a production connection's shape. */
   readonly model: Effect.Effect<ServerModel>
+  /**
+   * KV surface (note 0004 P2 semantics): one revision counter per key,
+   * CAS by expected revision (0 = create). Conflicts are typed errors.
+   * Single internal bucket for now — cells namespace their own keys.
+   */
+  readonly kvGet: (key: string) => Effect.Effect<Option.Option<KvEntry>>
+  readonly kvPut: (
+    key: string,
+    expectedRevision: number,
+    payload: string,
+  ) => Effect.Effect<number, KvConflict>
+}
+
+export interface KvEntry {
+  readonly revision: number
+  readonly payload: string
 }

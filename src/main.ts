@@ -1,45 +1,38 @@
 /**
- * Demo: schema → encode to wire text → publish (deduped) → tap → decode back.
- * The round trip exercised here is exactly the Lean `rt_ed` scenario.
+ * Demo: reactive cells over the simulated KV.
+ * A cell is one schema-typed KV message; updates are CAS'd and invalidate
+ * reactively. This is the whole user-facing surface.
  */
-import { Effect, Fiber, Option, Stream } from "effect"
-import { UserCreated, type UserCreated as User } from "./schema/messages.js"
-import { encodeWire, decodeWire } from "./schema/wire.js"
-import { issue, Registry } from "./core/registry.js"
-import { renderSubject } from "./core/subjects.js"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Reactivity } from "effect/unstable/reactivity"
+import { make as makeCell } from "./reactive/cell.js"
 import { Nats } from "./nats/service.js"
 
-const registry = new Registry()
-const subject = issue(registry, ["orders", "eu", "created"], UserCreated)
-if ("_tag" in subject) {
-  throw new Error(`registration failed: ${subject._tag}`)
-}
-
-const user: User = { name: "ann", age: 7 }
+const Counter = Schema.Number
 
 const program = Effect.gen(function* () {
-  const nats = yield* Nats
-  const wire =  encodeWire(UserCreated)(user)
+  const visits = yield* makeCell({
+    key: "app.visits",
+    schema: Counter,
+    initialValue: 0,
+  })
 
-  // tap the stream before publishing — the subscriber sees it land
-  const reader = yield* Effect.forkChild(
-    nats.tap().pipe(Stream.take(1), Stream.runHead),
+
+  yield* visits.update((n) => n + 1).pipe(
+    Effect.tap(() => Effect.log("saw: " + visits.get)),
+  )
+  yield* visits.update((n) => n + 1).pipe(
+    Effect.tap(() => Effect.log("saw: " + visits.get)),
+  ) 
+  yield* visits.update((n) => n * 10).pipe(
+    Effect.tap(() => Effect.log("saw: " + visits.get)),
   )
 
-  const first = yield* nats.jsPublishDedup("user-1", subject, wire)
-  const second = yield* nats.jsPublishDedup("user-1", subject, wire)
-  const tapped = Option.getOrUndefined(yield* Fiber.join(reader))
-  const model = yield* nats.model
+  const final = yield* visits.get
 
-  return {
-    subject: renderSubject(subject),
-    wire,
-    first,
-    second,
-    tapped: tapped?.payload ?? null,
-    decoded: decodeWire(UserCreated)(wire),
-    logLength: model.log.length,
-  }
+  return { final, }
 })
 
-Effect.runPromise(Effect.provide(program, Nats.layer)).then(console.log)
+Effect.runPromise(
+  Effect.provide(program, Layer.mergeAll(Nats.layer, Reactivity.layer)),
+).then(console.log)
