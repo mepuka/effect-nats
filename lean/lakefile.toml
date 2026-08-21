@@ -1,6 +1,0 @@
-name = "EffectNats"
-version = "0.1.0"
-defaultTargets = ["EffectNats"]
-
-[[lean_lib]]
-name = "EffectNats"
