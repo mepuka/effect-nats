@@ -20,7 +20,9 @@ in the sibling repo `../Foldable`; this repo holds the code, Foldable holds the 
 
 - `effect-foldable/` @ `648f566dd` — effect source at exactly the version installed here (4.0.0-rc.111)
 - `nats-server-foldable/` @ `8e2b49f` — server source, VERSION 2.15.0-dev
-- `nats-docs-foldable/` — 859-page Markdown mirror of docs.nats.io
+- `nats-docs-foldable/` — 859-page Markdown mirror of docs.nats.io. Never crawl it: grep the
+  per-page index at `research/logs/nats-docs-manifest.txt` for keywords, then open only the
+  exact pages it names.
 - `nats-adr-foldable/` @ `e23afc3` — 53 NATS architecture decision records
 - `research/` — surveyed and verified documents; `research/README.md` is the index
 - `skills/` — the six-package Lean workflow skill suite; use it for all Lean work
