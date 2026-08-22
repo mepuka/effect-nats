@@ -16,7 +16,7 @@ import {
 } from "@nats-io/transport-node"
 
 export class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
-  "effect-agents/ConnectionLost",
+  "effect-nats-agents/ConnectionLost",
   { reason: Schema.String },
 ) {}
 
@@ -45,7 +45,7 @@ export interface NatsConnectionShape {
 }
 
 export class NatsConnection extends Context.Service<NatsConnection, NatsConnectionShape>()(
-  "effect-agents/NatsConnection",
+  "effect-nats-agents/NatsConnection",
 ) {
   /** Build the connection service for the given broker options. */
   static readonly layer = (

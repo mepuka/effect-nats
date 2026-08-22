@@ -46,7 +46,7 @@ export class DiscoveryFailed extends Schema.TaggedError<DiscoveryFailed>()("Disc
   reason: Schema.String,
 }) {}
 
-/** Host construction rejected: malformed identity tokens or config. */
+/** Agent-host construction rejected: malformed address fields or configuration. */
 export class HostConfigError extends Schema.TaggedError<HostConfigError>()("HostConfigError", {
   reason: Schema.String,
 }) {}

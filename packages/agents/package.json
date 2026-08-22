@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Effect-native implementation of the Synadia Agent Protocol for NATS v0.3 — typed protocol kernel, streaming client, and compliant host, with a machine-checked conformance gate",
+  "description": "Independent Effect-native caller and agent-host implementation of the Synadia Agent Protocol for NATS v0.3, with a machine-checked conformance gate",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

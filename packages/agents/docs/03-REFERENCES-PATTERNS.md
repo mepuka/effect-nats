@@ -1,76 +1,69 @@
-# 0003 — References: distributed-systems patterns applied here
+# 0003 — Non-standard extension design heuristics
 
-Each pattern: statement → how it binds our design → what could go wrong if
-ignored. Cross-references: `SPEC` = docs/01-SPEC.md, `ND/ADR/B` ledger in
-docs/02-REFERENCES-NATS.md.
+Status: non-normative research. These patterns may guide a future local extension ADR; they are not
+Synadia Agent Protocol semantics or conformance evidence. NATS citations are indexed in
+`docs/02-REFERENCES-NATS.md`.
 
 ## P1 — At-least-once delivery ⇒ idempotent effects
 
-Delivery retries are inevitable (AckWait redelivery; lost acks — ND
-delivery-and-acknowledgment). Therefore every effect a message triggers MUST
-be idempotent or keyed-deduplicated. **SPEC §7**: job ids are deterministic
-functions of intent; apply is CAS-guarded. Failure mode without it: duplicate
-LLM calls billed twice, double-sent chat messages.
+An explicitly configured at-least-once design can redeliver after its acknowledgement deadline or
+an ambiguous acknowledgement outcome. Therefore a future work-queue ADR must define stable job ids,
+deduplication bounds, and idempotent application boundaries. Otherwise a redelivery can repeat an
+LLM call or send the same chat message twice.
 
 ## P2 — Effectively-once = at-least-once + dedup + idempotency
 
 Exactly-once *delivery* does not exist on asynchronous networks (two-generals
 family of results). What exists: exactly-once *observable effect* when
 at-least-once delivery meets a dedup window and an idempotent, ordered apply.
-Our Lean grade ladder encodes this honestly (`dedupWindow ≠ exactlyOnce`).
-**SPEC §3 D1, §7.**
+Any future model must preserve the distinction `dedupWindow ≠ exactlyOnce`.
 
 ## P3 — Heartbeats + leases for failure detection
 
-Failure detection is always timeout-based; the art is choosing thresholds.
-Protocol §8: interval_s carried in-band, offline threshold 3×interval per
-instance_id. KV TTL (ADR-48) turns liveness into a *lease*: acquire by CAS
-create (revision 0), renew by CAS update, expiry visible to watchers as a
-purge marker. Use leases for agent-slot ownership so a crashed host's work
-becomes claimable instead of stuck. Failure mode: split-brain workers both
-claiming one job — prevented by CAS-on-revision being server-side atomic.
+Protocol §8 carries `interval_s` in-band and defines the offline threshold as three intervals per
+`instance_id`. A future local extension could separately model a KV entry as a lease, acquired and
+renewed through revision-aware operations, but its expiry observation and reassignment rules need
+native-server evidence and an accepted ADR. A single-key CAS can prevent two successful updates at
+the same expected revision; it does not by itself prove exclusive execution of external work.
 
 ## P4 — Work queues via storage-backed competing consumers
 
-Queue groups (core NATS) lose messages on member crash (at-most-once). The
-durable pattern: WorkQueue retention + shared durable pull consumer — first
-ack removes the task for everyone; crashed worker's in-flight job redelivered
-after AckWait (ND worker-pool). Scale by adding processes, not by partitioning
-logic. **SPEC §7.** Failure modes: poison jobs → `term` after max-deliver +
-advisory-driven quarantine; slow jobs → periodic `in-progress` (WITNESS) to
-reset AckWait.
+Core queue groups distribute messages among active members and do not add durable redelivery. A
+future work-queue extension may instead use WorkQueue retention and a shared durable pull consumer,
+but it must specify acknowledgement, redelivery, maximum-delivery, poison-message, delayed retry,
+and in-progress behavior from official JetStream evidence. Those mechanics do not make the handler's
+external effects exactly once.
 
 ## P5 — Backpressure must be end-to-end and bounded
 
-An unbounded buffer converts overload into latency into collapse. Every
-wire⇄user boundary gets a bounded queue with an explicit policy:
-suspend (correctness-critical), slide/drop-latest (token deltas — losing old
-partials is fine, they're superseded), or coalesce (batch on a flush cadence).
-Backpressure applies to the *offending* path only; broker I/O fibers never
-block on user code (**SPEC §6**).
+An unbounded buffer converts overload into latency into collapse. Every wire⇄user boundary needs a
+bounded, operation-specific policy. Standard protocol reply chunks are loss-intolerant:
+slide/drop/coalesce is forbidden unless a separate extension contract changes the data model and
+exposes loss diagnostics. Broker I/O fibers must not silently accumulate or block forever on user
+code.
 
 ## P6 — Supervision, not hope
 
-Long-lived loops (heartbeats, consumers, pumps) die: on exception, on
-interrupt, on resource loss. Each runs under a supervisor that restarts with
-backoff and escalates repeated death into observable status (a Cell), never
-silence. This is Erlang's let-it-crash discipline applied to fibers.
+Long-lived loops (heartbeats, consumers, pumps) can terminate on failure, interruption, or resource
+loss. Each extension contract must state which terminations are final and which are retried with a
+bounded schedule; repeated failure must remain observable rather than silently changing protocol
+semantics.
 
 ## P7 — Scatter-gather with bounded concurrency and quorum
 
-Fan a request to N agents, take first-good or majority-vote. Bound in-flight
-fan-out (no thundering herd); per-reply timeout independent of overall
-deadline; late losers get cancelled (P8). NATS gives the transport shape for
-free: multi-response request on `$SRV.PING`-style subjects (ND request-reply,
-scatter-gather chapters).
+A non-standard orchestration layer may fan a request to multiple agents and choose a first-good or
+quorum result. It must bound concurrency, distinguish per-reply inactivity from the overall
+deadline, and release losing reply subscriptions. Remote cancellation is unavailable unless a
+separate extension has been negotiated.
 
 ## P8 — Cancellation is cooperative and two-phase
 
 Signal propagation (control subject / AbortSignal) only requests cancellation;
 the worker decides where to stop safely (between tool calls, at token
 boundaries) and reports terminal state. Abandoned-work reclamation falls back
-to leases (P3): if no renewal arrives, the slot frees regardless. Protocol
-§6.7's "drop subscription" is phase one only.
+to leases (P3): if no renewal arrives, the slot frees regardless. The standard protocol defines no
+cancellation signal. Dropping reply interest stops local delivery only; a future extension must
+define whether and how remote cancellation is acknowledged.
 
 ## P9 — Total order per log, partial order across logs
 
@@ -90,9 +83,9 @@ accident (note 0004 §4: cross-domain misconfig fails silently).
 
 ## P11 — Deterministic correlation ids make replays safe
 
-Every async round-trip (mid-stream query §7, job, cancel) carries an id that
-is stable across retries. Replies and effects key on it; duplicates collapse.
-This is the thread that ties P1/P2/P4 together and it costs nothing.
+Every retriable extension round-trip needs a correlation or idempotency identifier whose scope,
+retention window, and duplicate rules are explicit. An identifier alone does not collapse
+duplicates; the receiving state transition or effect boundary must enforce that behavior.
 
 ## P12 — Consensus exists below you; know what it buys
 

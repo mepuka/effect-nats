@@ -1,5 +1,5 @@
 /**
- * AgentHost — the server side (docs/01-SPEC.md §§3, 5, 6; Protocol §§6, 8, 9).
+ * AgentHost — the local Effect service implementing the protocol agent-host role.
  *
  * The reply pump is a single sequential writer per prompt, so the wire
  * sequence is correct by construction:
@@ -33,7 +33,7 @@ import { parseMaxPayload } from "./protocol/validation.js"
 import { hostDefaultSubject } from "./protocol/subjects.js"
 import { Wire, type ReplyMessage } from "./wire.js"
 
-export interface HostIdentity {
+export interface AgentAddress {
   readonly agent: string
   readonly owner: string
   readonly name: string
@@ -58,7 +58,7 @@ export type PromptHandler = (
 ) => Stream.Stream<HandlerChunk, AgentFailure>
 
 export interface AgentHostConfig {
-  readonly identity: HostIdentity
+  readonly address: AgentAddress
   readonly handler: PromptHandler
   readonly version?: string | undefined
   readonly description?: string | undefined
@@ -90,12 +90,12 @@ const ERROR_NAMES: Record<number, string> = {
 
 export interface AgentHostShape {
   readonly instanceId: string
-  readonly identity: HostIdentity
+  readonly address: AgentAddress
   readonly serviceInfo: Readonly<Record<string, unknown>>
 }
 
 export class AgentHost extends Context.Service<AgentHost, AgentHostShape>()(
-  "effect-agents/AgentHost",
+  "effect-nats-agents/AgentHost",
 ) {}
 
 const encoder = new TextEncoder()
@@ -152,14 +152,14 @@ export const layerHost = (
   Layer.effect(AgentHost)(
     Effect.gen(function* () {
       const wire = yield* Wire
-      const { agent, owner, name } = config.identity
+      const { agent, owner, name } = config.address
 
       const promptSubject = hostDefaultSubject("prompt", agent, owner, name)
       const statusSubject = hostDefaultSubject("status", agent, owner, name)
       const hbSubject = hostDefaultSubject("hb", agent, owner, name)
       if (promptSubject === null || statusSubject === null || hbSubject === null) {
         return yield* new HostConfigError({
-          reason: `invalid identity tokens: ${agent}.${owner}.${name}`,
+          reason: `invalid agent address: ${agent}.${owner}.${name}`,
         })
       }
       const intervalS = config.heartbeatIntervalS ?? DEFAULT_HEARTBEAT_INTERVAL_S
@@ -396,6 +396,6 @@ export const layerHost = (
       yield* Effect.all(bounds)
       yield* supervised(heartbeatLoop)
 
-      return AgentHost.of({ instanceId, identity: config.identity, serviceInfo })
+      return AgentHost.of({ instanceId, address: config.address, serviceInfo })
     }),
   )

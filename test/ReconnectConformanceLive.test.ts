@@ -114,13 +114,17 @@ for (const encrypted of [false, true]) {
 
           yield* first.stop
           const statuses = yield* awaitWithin(status.reconnected, `${transport} reconnect`)
-          expect(
-            statuses
-              .map((event) => event.type)
-              .filter((type) =>
-                type === "disconnect" || type === "reconnecting" || type === "reconnect"
-              )
-          ).toEqual(["disconnect", "reconnecting", "reconnect"])
+          const lifecycle = statuses
+            .map((event) => event.type)
+            .filter((type) =>
+              type === "disconnect" || type === "reconnecting" || type === "reconnect"
+            )
+          // Official NATS.js emits `reconnecting` before every resolved-address dial,
+          // so a two-server failover may report it more than once.
+          expect(lifecycle[0]).toBe("disconnect")
+          expect(lifecycle.at(-1)).toBe("reconnect")
+          expect(lifecycle.slice(1, -1).length).toBeGreaterThanOrEqual(1)
+          expect(lifecycle.slice(1, -1).every((type) => type === "reconnecting")).toBe(true)
           expect(connection.getServer()).toContain(String(second.port))
           expect(consumer.pollUnsafe()).toBeUndefined()
 

@@ -1,6 +1,6 @@
 /**
- * P0 protocol kernel tests — each test cites its spec section.
- * Protocol: Agent Protocol for NATS v0.3.0; SPEC: docs/01-SPEC.md.
+ * P0 wire-contract model tests — each test cites its upstream spec section.
+ * Protocol: Synadia Agent Protocol for NATS v0.3.0; local contract: docs/01-SPEC.md.
  */
 import { describe, expect, test } from "bun:test"
 import {

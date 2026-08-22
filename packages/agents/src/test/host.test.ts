@@ -1,7 +1,7 @@
 /**
  * Host pump + client round trips over the in-memory loopback bus, all under
  * TestClock. The pump's actual wire output is checked against the SAME DFA
- * (`wellFormed`) the protocol kernel defines — model and implementation must
+ * (`wellFormed`) derived from the upstream wire contract — model and implementation must
  * agree.
  */
 import { describe, expect, test } from "bun:test"
@@ -18,10 +18,10 @@ import { makeLoopbackBus, msg, type LoopbackBus } from "./kit.js"
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
-const IDENTITY = { agent: "cc", owner: "own", name: "main" }
+const ADDRESS = { agent: "cc", owner: "own", name: "main" }
 
 const hostConfig = (overrides?: Partial<AgentHostConfig>): AgentHostConfig => ({
-  identity: IDENTITY,
+  address: ADDRESS,
   instanceId: "inst-1",
   heartbeatIntervalS: 30,
   handler: (req) =>
@@ -72,7 +72,7 @@ const promptRaw = (
   inbox: string,
 ) =>
   bus.wire.publish(
-    `agents.prompt.${IDENTITY.agent}.${IDENTITY.owner}.${IDENTITY.name}`,
+    `agents.prompt.${ADDRESS.agent}.${ADDRESS.owner}.${ADDRESS.name}`,
     typeof payload === "string" ? new TextEncoder().encode(payload) : payload,
     { replyTo: inbox },
   )
@@ -209,15 +209,15 @@ describe("client ⇄ host round trip", () => {
         yield* TestClock.adjust(5_000)
         const found = yield* Fiber.join(fiber)
         expect(found).toHaveLength(1)
-        const identity = found[0]!
-        expect(identity.agent).toBe("cc")
-        expect(identity.owner).toBe("own")
-        expect(identity.instanceId).toBe("inst-1")
-        const prompt = identity.endpoints.find((e) => e.name === "prompt")
+        const agentInfo = found[0]!
+        expect(agentInfo.agent).toBe("cc")
+        expect(agentInfo.owner).toBe("own")
+        expect(agentInfo.instanceId).toBe("inst-1")
+        const prompt = agentInfo.endpoints.find((e) => e.name === "prompt")
         expect(prompt?.maxPayload).toBe("1MB")
         expect(prompt?.attachmentsOk).toBe(true)
 
-        const run = yield* forkNow(Stream.runCollect(client.prompt(identity, "ping")))
+        const run = yield* forkNow(Stream.runCollect(client.prompt(agentInfo, "ping")))
         yield* TestClock.adjust(1_000)
         const chunks = yield* Fiber.join(run)
         expect(chunks.map((c) => c._tag)).toEqual(["Status", "Response", "Status"])
@@ -270,10 +270,10 @@ describe("client ⇄ host round trip", () => {
         const client = yield* AgentClient
         const fiber = yield* forkNow(client.discover())
         yield* TestClock.adjust(5_000)
-        const identity = (yield* Fiber.join(fiber))[0]!
+        const agentInfo = (yield* Fiber.join(fiber))[0]!
         const before = bus.log.length
         const error = yield* Effect.flip(
-          Stream.runCollect(client.prompt(identity, "x".repeat(2048))),
+          Stream.runCollect(client.prompt(agentInfo, "x".repeat(2048))),
         )
         expect(error._tag).toBe("LocalViolation")
         expect(bus.log.length).toBe(before)

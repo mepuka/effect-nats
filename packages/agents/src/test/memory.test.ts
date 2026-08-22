@@ -13,11 +13,11 @@ import { makeLoopbackBus, type LoopbackBus } from "./kit.js"
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
-const IDENTITY = { agent: "cc", owner: "own", name: "main" }
+const ADDRESS = { agent: "cc", owner: "own", name: "main" }
 const PROMPT_SUBJECT = "agents.prompt.cc.own.main"
 
 const hostConfig = (overrides?: Partial<AgentHostConfig>): AgentHostConfig => ({
-  identity: IDENTITY,
+  address: ADDRESS,
   instanceId: "inst-m",
   handler: (req) => Stream.make({ _tag: "Text", text: `echo:${req.prompt}` } as const),
   ...overrides,

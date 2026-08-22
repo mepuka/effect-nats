@@ -15,9 +15,11 @@ built over the official [`nats-server`](https://github.com/nats-io/nats-server) 
 - **`effect-nats` (repository root, principal package):** an Effect-native client layer over the official
   `@nats-io/*` packages, covering Core lifecycle and subscriptions plus the JetStream primitives
   required by Key/Value and Object Store.
-- **[`effect-nats-agents`](packages/agents/README.md) subsystem:** a typed caller and host implementation of
-  Synadia Agent Protocol v0.3, with a vendored protocol, machine-checked requirement ledger,
-  deterministic state-machine tests, and native-broker integration.
+- **[`effect-nats-agents`](packages/agents/README.md) subsystem:** an independent typed caller and
+  agent-host implementation of the externally owned
+  [Synadia Agent Protocol for NATS](https://github.com/synadia-ai/synadia-agent-sdk-docs) v0.3,
+  with a vendored protocol, machine-checked requirement ledger, deterministic state-machine tests,
+  and native-broker integration.
 
 Both packages pin `effect@4.0.0-rc.111`, install through one root `bun.lock`, and run from the same
 CI toolchain.
@@ -51,7 +53,7 @@ The accepted decisions and active workbenches are indexed in the
 [architecture workbench](docs/architecture/README.md). Confirmed review findings and proof gaps are
 kept in [TO_FIX.md](TO_FIX.md).
 
-## Agent Protocol progress
+## Synadia Agent Protocol adapter progress
 
 The package under `packages/agents` implements both sides of the v0.3 wire contract:
 
@@ -65,7 +67,8 @@ The package under `packages/agents` implements both sides of the v0.3 wire contr
 
 Its Bun suite includes property tests, reply-DFA model checks, virtual-time lifecycle tests,
 bounded-memory checks, and native-server cases for round trips, 400/429/503 outcomes, inactivity
-timeouts, heartbeat liveness, cancellation, and queue-group balancing.
+timeouts, heartbeat liveness, caller interruption and subscription release, and queue-group
+balancing.
 
 ## Client conformance progress
 

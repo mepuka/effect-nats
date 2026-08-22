@@ -1,5 +1,5 @@
 /**
- * AgentClient — discovery, liveness, and prompting (docs/01-SPEC.md §§2, 5).
+ * AgentClient — the local Effect service implementing the protocol caller role.
  *
  * Discovery collects `$SRV.INFO.agents` replies until a quiet gap or an
  * overall deadline, both Clock-driven. Liveness tracks heartbeats through one
@@ -31,7 +31,7 @@ import { parseMaxPayload, validateLocal } from "./protocol/validation.js"
 import { promptStream } from "./prompt-engine.js"
 import { Wire } from "./wire.js"
 
-export interface AgentEndpointInfo {
+export interface EndpointInfo {
   readonly name: string
   readonly subject: string
   readonly queueGroup?: string | undefined
@@ -39,7 +39,7 @@ export interface AgentEndpointInfo {
   readonly attachmentsOk?: boolean | undefined
 }
 
-export interface AgentIdentity {
+export interface AgentInfo {
   readonly agent: string
   readonly owner: string
   readonly session?: string | undefined
@@ -48,7 +48,7 @@ export interface AgentIdentity {
   readonly description?: string | undefined
   /** §5.6: full metadata record preserved for relay. */
   readonly metadata: Readonly<Record<string, unknown>>
-  readonly endpoints: readonly AgentEndpointInfo[]
+  readonly endpoints: readonly EndpointInfo[]
 }
 
 export const CALLER_PROTOCOL_VERSION = "0.3"
@@ -71,7 +71,7 @@ export const isCompatibleProtocolVersion = (declared: string): boolean => {
  * and `metadata.protocol_version` passing §11.2; non-compliant records are
  * excluded rather than laundered into identities with manufactured fields.
  */
-const toIdentity = (info: ServiceInfo): Option.Option<AgentIdentity> => {
+const toAgentInfo = (info: ServiceInfo): Option.Option<AgentInfo> => {
   if (info.name !== "agents") return Option.none()
   const md = info.metadata ?? {}
   const agent = md["agent"]
@@ -144,13 +144,13 @@ export const DEFAULT_QUIET_MS = 300
 export const DEFAULT_DEADLINE_MS = 3_000
 
 export class AgentClient extends Context.Service<AgentClient, AgentClientShape>()(
-  "effect-agents/AgentClient",
+  "effect-nats-agents/AgentClient",
 ) {}
 
 export interface AgentClientShape {
   readonly discover: (
     options?: DiscoverOptions,
-  ) => Effect.Effect<readonly AgentIdentity[], DiscoveryFailed>
+  ) => Effect.Effect<readonly AgentInfo[], DiscoveryFailed>
 
   readonly liveness: () => Effect.Effect<ReadonlyMap<string, LivenessEntry>>
 
@@ -161,7 +161,7 @@ export interface AgentClientShape {
   readonly heartbeats: () => Stream.Stream<Heartbeat>
 
   readonly prompt: (
-    identity: AgentIdentity,
+    info: AgentInfo,
     text: string,
     options?: PromptOptions,
   ) => Stream.Stream<Chunk, PromptCallError>
@@ -238,7 +238,7 @@ export const layerClient = (options?: ClientOptions): Layer.Layer<AgentClient, n
         const quietMs = opts?.quietMs ?? DEFAULT_QUIET_MS
         const deadlineMs = opts?.deadlineMs ?? DEFAULT_DEADLINE_MS
         yield* Deferred.await(hbBound)
-        const found: AgentIdentity[] = []
+        const found: AgentInfo[] = []
         yield* Effect.scoped(
           Effect.gen(function* () {
             const replies = yield* wire.request("$SRV.INFO.agents", new Uint8Array(0))
@@ -246,13 +246,13 @@ export const layerClient = (options?: ClientOptions): Layer.Layer<AgentClient, n
               Stream.filterMap((m) => safeJson(m.payload)),
               Stream.filterMap(decodeServiceInfo),
               Stream.filterMap((info) =>
-                Option.match(toIdentity(info), {
+                Option.match(toAgentInfo(info), {
                   onNone: () => Result.fail(info),
                   onSome: Result.succeed,
                 }),
               ),
               Stream.timeout(quietMs),
-              Stream.runForEach((identity) => Effect.sync(() => found.push(identity))),
+              Stream.runForEach((agentInfo) => Effect.sync(() => found.push(agentInfo))),
             )
             yield* Effect.race(collect, Effect.sleep(deadlineMs))
           }),
@@ -276,8 +276,8 @@ export const layerClient = (options?: ClientOptions): Layer.Layer<AgentClient, n
         heartbeats: () =>
           Stream.unwrap(Effect.map(PubSub.subscribe(hbPubSub), Stream.fromSubscription)),
 
-        prompt: (identity, text, opts) => {
-          const endpoint = identity.endpoints.find((e) => e.name === "prompt")
+        prompt: (info, text, opts) => {
+          const endpoint = info.endpoints.find((e) => e.name === "prompt")
           if (endpoint === undefined) {
             return failLocal("agent exposes no prompt endpoint")
           }

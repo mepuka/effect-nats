@@ -43,10 +43,10 @@ export interface SubscribeOptions {
  * Multi-response request primitive. Binds an inbox BEFORE publishing
  * (subscribe-before-publish ordering, Protocol §4/§8.5 discipline), publishes,
  * and returns the live reply stream. The stream is scoped: closing the scope
- * unsubscribes (which IS cancellation per Protocol §6.7 — interest drops and
- * the server discards subsequent messages at no cost).
+ * unsubscribes and stops caller-side delivery. Protocol §6.7 defines no
+ * cancellation signal, so this does not prove that agent-host work stopped.
  */
-export class Wire extends Context.Service<Wire, WireShape>()("effect-agents/Wire") {}
+export class Wire extends Context.Service<Wire, WireShape>()("effect-nats-agents/Wire") {}
 
 export interface WireShape {
   /** Our broker's max payload (§5.4: min binds against advertised limits). */

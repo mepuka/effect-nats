@@ -1,53 +1,48 @@
-# 0000 — Plan: `effect-agents` — an Effect-native Agent Protocol runtime
+# 0000 — Implementation plan for `effect-nats-agents`
 
-Status: active · Supersedes the wrapper idea (notes/0006 amended): we do NOT wrap
-`@synadia-ai/*`; we implement the [Agent Protocol for NATS v0.3](https://github.com/synadia-agent-sdk-docs/core-protocol.md)
-natively in Effect, wire-compatible where it matters, better where it counts.
-Their code may be consulted/reused piecewise (Apache-2.0), but it is not a dependency.
+Status: active
 
-## Why native
+This package independently implements the
+[Synadia Agent Protocol for NATS v0.3](https://github.com/synadia-ai/synadia-agent-sdk-docs/blob/d907f5ca080528ee5e9e1385f0591c42f7fdb9b8/core-protocol.md)
+with Effect. The upstream specification owns the wire contract. The
+[official SDK repository](https://github.com/synadia-ai/synadia-agents) is the primary
+implementation comparison; this package does not wrap `@synadia-ai/*` at runtime.
 
-The protocol's own deferrals are our design space:
-
-| Protocol gap (v0.3) | Our answer |
-|---|---|
-| Core-NATS-only responses: chunks are at-most-once, a lost terminator hangs callers until inactivity timeout (§6.6) | Dual transport: core NATS for interactive streams + **JetStream-backed durable mode** (dedup id per chunk-sequence, terminator committed once) |
-| No cancellation signal (§6.7) — agents burn tokens for abandoned callers | Control-plane subjects + KV lease: cancel propagates to the handler Effect as fiber interruption; mid-stream query doubles as liveness probe |
-| Untyped wire (JSON blobs, stringly `max_payload`) | effect/`Schema` end-to-end internally; wire stays byte-compatible |
-| Errors as headers + ad-hoc JSON body (§9) | Mirrored `Schema.TaggedError` taxonomy; E channel is inhabited by construction |
-| Heartbeat death is silent | Supervised repeat loops; liveness is a reactive Cell |
+Exact standard behavior comes first. Local Effect APIs may improve type safety, resource safety,
+and testability, but they may not weaken, reinterpret, or selectively implement protocol
+requirements.
 
 ## Modules
 
-```
-effect-agents/
-  protocol/    # pure: subject algebra, envelope/chunk schemas, validation rules (§5.3, §5.4)
-  transport/   # core-nats interpreter + jetstream interpreter behind one interface
-  host/        # AgentHost: registration ($SRV micro API), prompt handler pump,
-               # heartbeats, status endpoint — all Effects, scoped lifecycle
-  client/      # AgentClient: discover/prompt/liveness; async-iterable ⇄ Stream bridges
-  queue/       # typed decentralized work queue on JetStream WQ retention + pull consumers
-  orchestrate/ # scatter-gather, budgets (Schedule admission), supervision trees, sagas
+```text
+packages/agents/
+  src/agents/protocol/  # protocol-derived subjects, codecs, validators, reply DFA
+  src/agents/           # Wire seam, caller service, agent-host service, prompt engine
+  src/test/             # conformance, state-machine, lifecycle, memory, live-broker evidence
+  docs/upstream/        # immutable vendored protocol and provenance
+  docs/conformance/     # requirement ledger derived from the vendored protocol
 ```
 
-## Slices
+## Delivery slices
 
-1. **P0 — protocol kernel** (pure, no I/O): subject algebra (verb-first, §2),
-   envelope discrimination rule (§5.3), local validation (§5.4), chunk schema +
-   terminator model (§6). Property-testable against the spec text. Lean can
-   referee the subject algebra (we already have the token/refinement machinery).
-2. **P1 — connection + client read path**: scoped `NatsConnection` Layer;
-   `prompt()` as interruptible `Stream`; inactivity timeout; error-header
-   decoding; tested against a local `nats-server`.
-3. **P2 — host path**: `AgentHost` with Effect handlers; mandatory-first `ack`
-   chunk (§6.4); terminator exactly-once; heartbeats + status endpoint;
-   echo agent, then an `effect/ai` `LanguageModel` agent.
-4. **P3 — durable transport**: JetStream response mode; dedup ids; cancellation
-   control plane.
-5. **P4 — work queue + orchestration**: the coordination playground opens.
+1. **P0 — wire-contract model**: subject parsing, envelope discrimination, local validation,
+   chunk decoding, and reply-sequence checking derived from the pinned protocol.
+2. **P1 — caller path**: scoped NATS connection, discovery, heartbeat liveness, prompt Stream,
+   inactivity timeout, error-header decoding, and interruption-safe subscription release.
+3. **P2 — agent-host path**: `AgentHost` with Effect handlers, protocol registration, ack-first
+   accepted replies, exactly-once terminator emission, heartbeats, status, `$SRV` responders, and
+   bounded admission.
+4. **P3 — interoperability hardening**: native-broker tests plus differential tests against the
+   official TypeScript/Python caller and host SDKs.
 
-## Compliance stance
+## Conformance stance
 
-Wire-compliant caller AND host per the §12 checklist, with additive extensions
-that degrade gracefully against vanilla peers (they simply don't subscribe to
-our control plane).
+Conformance means the caller and agent-host behavior passes the upstream §12 checklist and the
+repository's strict requirement ledger. The implementation must publish and consume standard
+v0.3 frames exactly as specified and must tolerate upstream extension points exactly where the
+protocol requires.
+
+JetStream-backed replies, cancellation signals, work queues, orchestration, and control-plane
+subjects are not v0.3 behavior. Research for those capabilities lives in
+[`extensions/durable-cancellation-workbench.md`](extensions/durable-cancellation-workbench.md)
+and cannot count as protocol conformance or alter vanilla-peer behavior.

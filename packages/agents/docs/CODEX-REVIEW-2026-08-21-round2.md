@@ -1,5 +1,8 @@
 # Codex adversarial review — round 2 (2026-08-21)
 
+Status: archival review receipt. Names and terminology below describe the code as it existed at the
+reviewed baseline; current terminology is defined by `../CONTEXT.md`.
+
 ## Scope and method
 
 Reviewed the requested protocol kernel, transport/client/host modules, and `src/test/*.ts` against `docs/upstream/core-protocol-v0.3.0.md`, `docs/01-SPEC.md`, the repository engineering contract, and the pinned `effect@4.0.0-rc.111` source. The review exercised public boundaries with the existing scripted wire and loopback bus. I did not modify `docs/conformance/protocol-requirements.json`, `src/test/conformance-evidence.test.ts`, `docs/upstream/*`, or `src/test/conformance/*`.

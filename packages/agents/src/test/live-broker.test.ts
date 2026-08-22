@@ -3,7 +3,7 @@
  * nats-server (skipped when the binary is absent). Real clock, tight
  * windows — everything here exercises paths the loopback bus cannot:
  * socket-level subscribe-before-publish, no-responders, genuine inactivity
- * timeout, queue-group balancing, and cancellation by unsubscribe.
+ * timeout, queue-group balancing, and caller interruption with subscription release.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { connect as netConnect } from "node:net"
@@ -64,7 +64,7 @@ const hostConfig = (
   name: string,
   overrides?: Partial<AgentHostConfig>,
 ): AgentHostConfig => ({
-  identity: { agent: "cc", owner: "live", name },
+  address: { agent: "cc", owner: "live", name },
   heartbeatIntervalS: 1,
   handler: (req) => Stream.make({ _tag: "Text", text: `echo:${req.prompt}` } as const),
   ...overrides,
@@ -79,21 +79,21 @@ const discoverOne = (name: string) =>
   Effect.gen(function* () {
     const client = yield* AgentClient
     const found = yield* client.discover({ quietMs: 400, deadlineMs: 4_000 })
-    const identity = found.find((i) =>
+    const agentInfo = found.find((i) =>
       i.endpoints.some((e) => e.subject.endsWith(`.${name}`)),
     )
-    if (identity === undefined) throw new Error(`host '${name}' not discovered`)
-    return identity
+    if (agentInfo === undefined) throw new Error(`host '${name}' not discovered`)
+    return agentInfo
   })
 
 describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
   test("discovery finds the host and a prompt round-trips end to end", async () => {
     await run(hostConfig("rt"), Effect.gen(function* () {
       const client = yield* AgentClient
-      const identity = yield* discoverOne("rt")
-      expect(identity.agent).toBe("cc")
-      expect(identity.protocolVersion).toBe("0.3")
-      const chunks = yield* Stream.runCollect(client.prompt(identity, "ping"))
+      const agentInfo = yield* discoverOne("rt")
+      expect(agentInfo.agent).toBe("cc")
+      expect(agentInfo.protocolVersion).toBe("0.3")
+      const chunks = yield* Stream.runCollect(client.prompt(agentInfo, "ping"))
       expect(chunks.map((c) => c._tag)).toEqual(["Status", "Response"])
       expect(chunks[1]?._tag === "Response" && chunks[1].text).toBe("echo:ping")
     }))
@@ -101,8 +101,8 @@ describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
 
   test("malformed request gets a 400 over the real wire, DFA intact", async () => {
     await run(hostConfig("bad"), Effect.gen(function* () {
-      const identity = yield* discoverOne("bad")
-      const subject = identity.endpoints.find((e) => e.name === "prompt")!.subject
+      const agentInfo = yield* discoverOne("bad")
+      const subject = agentInfo.endpoints.find((e) => e.name === "prompt")!.subject
       const error = yield* Effect.flip(
         Stream.runCollect(promptStream({ subject, payload: new Uint8Array(0) })),
       )
@@ -185,7 +185,7 @@ describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
     }))
   }, 15_000)
 
-  test("interrupting a prompt mid-stream cancels cleanly by unsubscribe", async () => {
+  test("interrupting a prompt mid-stream releases caller reply interest promptly", async () => {
     const config = hostConfig("cancel", {
       handler: () =>
         Stream.fromIterable(
@@ -194,9 +194,9 @@ describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
     })
     await run(config, Effect.gen(function* () {
       const client = yield* AgentClient
-      const identity = yield* discoverOne("cancel")
+      const agentInfo = yield* discoverOne("cancel")
       const fiber = yield* Effect.forkChild(
-        Stream.runCollect(client.prompt(identity, "long")),
+        Stream.runCollect(client.prompt(agentInfo, "long")),
         { startImmediately: true },
       )
       yield* Effect.sleep(200)
@@ -206,7 +206,7 @@ describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
     }))
   }, 15_000)
 
-  test("two same-identity hosts load-balance via the queue group", async () => {
+  test("two hosts at the same agent address load-balance via the queue group", async () => {
     const second = layerHost(
       hostConfig("lb", {
         instanceId: "lb-b",
@@ -220,10 +220,10 @@ describe.skipIf(NATS_BIN === null)("live broker (nats-server)", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const client = yield* AgentClient
-        const identity = yield* discoverOne("lb")
+        const agentInfo = yield* discoverOne("lb")
         const results: string[] = []
         for (let i = 0; i < 12; i++) {
-          const chunks = yield* Stream.runCollect(client.prompt(identity, `m${i}`))
+          const chunks = yield* Stream.runCollect(client.prompt(agentInfo, `m${i}`))
           const texts = chunks.filter((c) => c._tag === "Response")
           expect(texts).toHaveLength(1)
           const text = (texts[0] as { text: string }).text

@@ -1,6 +1,6 @@
 /**
- * Conformance evidence for Agent Protocol v0.3 stipulations not already
- * exercised by the kernel/property/engine/host suites. Each test names the
+ * Conformance evidence for Synadia Agent Protocol v0.3 stipulations not already
+ * exercised by the model/property/engine/agent-host suites. Each test names the
  * spec line(s) it witnesses; the catalog in docs/conformance references these.
  */
 import { describe, expect, test } from "bun:test"
@@ -39,7 +39,7 @@ const enc = (s: string): Uint8Array => new TextEncoder().encode(s)
 const dec = (b: Uint8Array): string => new TextDecoder().decode(b)
 const EMPTY = new Uint8Array(0)
 
-// -- pure kernel evidence ------------------------------------------------------
+// -- wire-contract model evidence ---------------------------------------------
 
 describe("§11 protocol version compatibility", () => {
   test("§11.1/§11.2 exact 0.3 accepted; patch and pre-release qualifiers ignored", () => {
@@ -246,10 +246,10 @@ describe("§6.3/§6.6 publication order", () => {
 
 // -- loopback host/client evidence ---------------------------------------------
 
-const IDENTITY = { agent: "cc", owner: "own", name: "main" }
+const ADDRESS = { agent: "cc", owner: "own", name: "main" }
 
 const hostConfig = (overrides?: Partial<AgentHostConfig>): AgentHostConfig => ({
-  identity: IDENTITY,
+  address: ADDRESS,
   instanceId: "inst-e",
   heartbeatIntervalS: 30,
   handler: (req) => Stream.make({ _tag: "Text", text: `echo:${req.prompt}` } as const),
@@ -520,7 +520,7 @@ describe("§5.6 host passes unknown envelope fields through", () => {
 })
 
 describe("§3.3/§3.4 queue group load-balancing", () => {
-  test("two same-identity hosts: a prompt is handled by exactly one", async () => {
+  test("two hosts at the same agent address: a prompt is handled by exactly one", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const bus = yield* makeLoopbackBus()
@@ -592,7 +592,7 @@ describe("§4/§11.2 discovery filtering", () => {
     )
   })
 
-  test("§3.2/§12 unknown metadata keys and endpoint names are preserved on the identity", async () => {
+  test("§3.2/§12 unknown metadata keys and endpoint names are preserved on AgentInfo", async () => {
     await withClientOnly((bus) =>
       Effect.gen(function* () {
         yield* respondOn(bus, "$SRV.INFO.agents", [
@@ -642,8 +642,8 @@ describe("§4/§11.2 discovery filtering", () => {
         const client = yield* AgentClient
         const fiber = yield* forkNow(client.discover())
         yield* TestClock.adjust(5_000)
-        const identity = (yield* Fiber.join(fiber))[0]!
-        const run = yield* forkNow(Stream.runCollect(client.prompt(identity, "ping")))
+        const agentInfo = (yield* Fiber.join(fiber))[0]!
+        const run = yield* forkNow(Stream.runCollect(client.prompt(agentInfo, "ping")))
         yield* TestClock.adjust(1_000)
         const chunks = yield* Fiber.join(run)
         expect(chunks.map((c) => c._tag)).toEqual(["Status"])

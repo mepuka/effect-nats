@@ -1,118 +1,89 @@
-# 0001 — Specification: Effect-native Agent Protocol runtime
+# 0001 — Local conformance contract for the Synadia Agent Protocol adapter
 
-Normative for our implementation. The upstream contract is the Agent Protocol
-for NATS v0.3.0 ("the Protocol"); we implement it fully and add extensions
-namespaced so vanilla peers are unaffected. RFC 2119 keywords apply.
+This document constrains this repository's independent implementation of the externally owned
+Synadia Agent Protocol for NATS v0.3.0. It is not a protocol specification and cannot amend the
+vendored upstream contract. When this document and upstream differ, upstream wins and this file
+must be corrected.
 
-## 1. Subject algebra (Protocol §2)
+RFC 2119 keywords below are quotations or direct implementation obligations traced to the pinned
+upstream specification. Local engineering policies are labeled **Local policy**.
 
-- Identity tuple: `agents.{verb}.{agent}.{owner}.{name}`; verbs `prompt | hb |
-  status | attachments`; `hb` is protocol-fixed.
-- Tokens: MUST NOT start with `$`; SHOULD match `[a-z0-9_-]{1,63}`.
-- Endpoint subjects are LEARNED from `$SRV.INFO`, never constructed — except
-  `agents.hb.*.*.*` which is fixed by the Protocol.
-- Our internal subjects (cancellation, control plane) live under
-  `_fx.agents.{...}` — outside the protocol's reserved tree, invisible to it.
+## 1. Subject handling (Protocol §2)
 
-Invariant S1 (refereeable): the token well-formedness relation and wildcard
-matching (`*` = exactly one, trailing `>` = one-or-more) form a refinement
-order; exact literal patterns are singletons. [Subject.lean already proves
-this family; port to the protocol's verb-first shape.]
+- The default subject tuple is `agents.{verb}.{agent}.{owner}.{name}` with verbs `prompt | hb |
+  status | attachments`; only the heartbeat subject is protocol-fixed.
+- Tokens MUST NOT start with `$`; they SHOULD match `[a-z0-9_-]{1,63}`.
+- Caller code learns endpoint subjects from `$SRV.INFO` and uses them verbatim. It never constructs
+  prompt or status subjects from metadata.
+- Agent-host code may build its own default endpoint subjects from validated configuration.
 
-## 2. Request path
+The runtime matcher and subject constructors are protocol-derived implementation machinery, not a
+new subject algebra owned by this package.
 
-- Envelope discrimination (§5.3) implemented as a total function:
-  `parseRequest: Uint8Array → Result<RequestEnvelope, RequestError>` with
-  `RequestError = EmptyPayload | EmptyPrompt | MalformedJson | MissingPrompt |
-  InvalidAttachment | NotAnObject`. All six map to status `400` on the wire
-  (upstream §5.3, §9.2); the finer taxonomy exists for local diagnostics only.
-- Plain text is promoted VERBATIM (no trimming); a prompt is rejected as empty
-  exactly when it is blank (zero-length or whitespace-only) in either encoding.
-- Local validation (§5.4) runs BEFORE publish: attachment permission and
-  encoded-size against `min(max_payload_advertised, nc.info.max_payload)`.
-- Unknown fields tolerated AND preserved (§5.6) — our Schema decoders carry a
-  passthrough record.
+## 2. Request path (Protocol §5)
 
-## 3. Response streaming
+- Envelope discrimination is total over bytes and maps malformed input to typed local diagnostics.
+  Agent-host rejection maps those diagnostics to protocol status `400`.
+- Plain text is promoted verbatim; JSON envelopes require a non-empty string `prompt`.
+- Caller-side validation runs before publish and checks attachments plus final encoded bytes against
+  both advertised `max_payload` and the broker maximum.
+- Unknown envelope and attachment fields are tolerated and preserved by relay-capable codecs.
 
-Host obligations:
+## 3. Response streaming (Protocol §§6 and 9)
 
-1. Emit `{type:"status",data:"ack"}` as the FIRST message on the reply
-   subject, before any latency-inducing work (§6.4).
-2. Chunks in publication order; terminator (zero-byte, header-less) LAST;
-   nothing after it (§6.5).
-3. Errors: error-headered message, THEN terminator (§9.3).
+For an accepted prompt, the agent host emits the mandatory `ack` first, preserves publication
+order, emits at most one error signal, emits the zero-byte/headerless terminator last, and publishes
+nothing afterward. A rejection emits an error signal followed by the terminator without first
+claiming acceptance.
 
-Our pump model: the handler returns a chunk Stream; a single interpreter owns
-the reply subject and enforces the reply DFA structurally:
+The local `stepWellFormed`/`wellFormed` DFA is a checker derived from those upstream rules. It is
+used by the agent-host pump, caller read path, and independent model tests; it is not itself the
+protocol authority.
 
-```
-accepted ::= ack · chunk* · error? · terminator
-rejected ::= error · terminator            (no ack: §6.4 ack confirms ACCEPTANCE,
-                                            so 400/429 rejections precede it)
-ack-first        :: pump emits ack before pulling the first element
-terminator-once  :: single sequential writer; terminator in a guarded finalizer
-order            :: Stream is sequential by definition
-```
+The caller applies the upstream inactivity timeout to every observed frame, checks service-error
+headers before body interpretation, rejects malformed known chunks, and ignores unknown chunk
+types as required.
 
-The same DFA (`stepWellFormed`/`wellFormed` in `protocol/chunks.ts`) is the
-caller-side checker and the model-based test oracle.
+## 4. Cancellation boundary (Protocol §6.7)
 
-Caller obligations: inactivity timeout (default 60s since last chunk, §6.6);
-unknown chunk types skipped silently; error headers checked on every message.
+The protocol defines no cancellation signal. Interrupting a local caller Stream must release its
+reply subscription exactly once and stop local delivery. It does not prove the agent host observed
+cancellation or stopped generation.
 
-**Extension D1 (durable mode)**: when both peers advertise JetStream support,
-response chunks publish to an ad-hoc stream with `Nats-Msg-Id =
-{reply-inbox}#{seq}`; caller consumes with an ephemeral ordered consumer;
-terminator committed once ⇒ at-least-once delivery of a stream that terminates
-exactly once. Reconnect mid-response replays from last-seen seq.
+Any future cancellation signal is a separate, opt-in local extension protocol and must not be
+described as standard v0.3 behavior.
 
-## 4. Cancellation (extension D2)
+## 5. Liveness (Protocol §8)
 
-Protocol §6.7 defines none. We add:
+- Heartbeat interest is bound before discovery begins.
+- Periodic heartbeat and status replies share one payload builder.
+- Liveness is keyed by service `instance_id`, not the agent/owner/name tuple or session.
+- A service instance is offline after the upstream three-interval threshold.
 
-- Caller-side: interrupting the prompt Effect closes the reply subscription
-  (protocol behavior, chunks die server-side) AND publishes
-  `_fx.agents.cancel.{instance_id}.{correlation_id}`.
-- Host-side: the cancel subject is bound to the in-flight handler fiber via
-  a registry keyed by correlation id; interruption propagates into
-  `LanguageModel` calls (their SDKs take AbortSignal; our bridge maps fiber
-  interruption ⇄ signal in both directions).
-- Liveness fallback per Protocol §7: hosts SHOULD issue a mid-stream query as
-  an abandonment probe for expensive work even without D2 support.
+**Local policy:** remote interval values are validated and clamped for pruning, and the liveness map
+has a hard capacity so untrusted heartbeat traffic cannot create unbounded retention.
 
-## 5. Liveness
+## 6. Concurrency and resource bounds
 
-- Heartbeat loop = supervised repeat: `Effect.repeat(Schedule.spaced(interval))`
-  under a restart supervisor; failure increments a status Cell, never dies
-  silently.
-- Status endpoint replies from the SAME builder as periodic beats (§8.7.1).
-- Subscribe-before-discover ordering enforced by the client's typestate:
-  discovery is unavailable until the heartbeat wildcard is bound.
+**Local policy:** all subscriptions, fibers, queues, pubsubs, and concurrent work are scope-owned and
+explicitly bounded. Agent-host prompt admission has a positive finite capacity; overload maps to
+protocol status `429`. Broker callbacks must not block on arbitrary user work.
 
-## 6. Concurrency and backpressure
+These bounds are implementation behavior. They do not create protocol delivery, fairness,
+backpressure, retry, or durability guarantees.
 
-- Default 1 in-flight prompt per hosted agent identity (queue group `"agents"`
-  load-balances across instances; serialization is per-instance). Configurable
-  bounded concurrency; overflow responds `429` (§9.2) — never queues forever.
-- All wire⇄user boundaries are bounded Queues/PubSubs. A slow prompt reader
-  backpressures its own pump only; broker I/O fibers never block on user code.
+## 7. Conformance and extensions
 
-## 7. Work queue (module `queue/`)
+The vendored upstream file and generated requirement ledger are the only protocol conformance
+authority in this repository. Tests for a local extension live outside that ledger.
 
-Built strictly from documented NATS mechanics: WorkQueue retention + shared
-durable pull consumers + explicit acks (docs: retention-policies,
-worker-pool, acknowledgment). Job = Schema-typed payload + deterministic
-dedup id (`Nats-Msg-Id`). Semantics: at-least-once delivery, idempotent
-apply required; `nak` with delay for retry, `term` to quarantine after
-max-deliver; advisories drive quarantine observability. This is
-*effectively-once apply*, not exactly-once delivery — named honestly, same
-discipline as the Lean grade ladder.
+Non-standard durability, cancellation, work queues, orchestration, and control-plane features must
+be separately negotiated, use non-reserved subjects, preserve vanilla-peer fallback, and have an
+accepted local ADR before implementation. Current research is isolated in
+[`extensions/durable-cancellation-workbench.md`](extensions/durable-cancellation-workbench.md).
 
 ## 8. Error taxonomy
 
-Mirrors §9.2 one-to-one as `Schema.TaggedError` classes:
-`BadRequest400 | Unauthorized401 | Forbidden403 | NotFound404 | Conflict409 |
-RateLimited429 | Internal500`, plus transport-level errors
-(`StreamTimeout`, `TerminatorLost`) that have no protocol code but must be
-distinguishable in E.
+Protocol service errors preserve the upstream §9 status codes and headers. Local typed errors may
+distinguish validation, discovery, inactivity timeout, malformed peer frames, transport failure,
+and host configuration, but they must not invent new wire status semantics.

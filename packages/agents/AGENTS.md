@@ -1,11 +1,15 @@
-# Agent Protocol engineering contract
+# Synadia Agent Protocol adapter engineering contract
 
 The root `AGENTS.md` applies first. This file adds the rules specific to
 `packages/agents`.
 
-This repository implements the Synadia Agent Protocol v0.3 on NATS with
+This package independently implements the Synadia Agent Protocol for NATS v0.3 with
 `effect@4.0.0-rc.111`. Correct wire behavior comes before convenience or API
 surface area. Passing examples alone is not conformance.
+
+The protocol is external semantic space owned by Synadia. Read `CONTEXT.md` and use its canonical
+terms. Never describe local codecs, state machines, extensions, or Effect APIs as defining or
+improving the protocol.
 
 ## Authority and required reading
 
@@ -13,9 +17,10 @@ Use these sources in order. A lower source may clarify, but never weaken, a
 higher one.
 
 1. `docs/upstream/core-protocol-v0.3.0.md` is the vendored wire contract.
-2. `docs/01-SPEC.md` contains additive project requirements.
-3. The workspace-installed `effect/src` is authoritative for the pinned Effect API.
-4. Root research is comparison evidence only; verify a pattern before adapting it.
+2. `CONTEXT.md` mirrors upstream vocabulary and separates it from local terms.
+3. `docs/01-SPEC.md` contains local implementation requirements; it cannot amend the protocol.
+4. The workspace-installed `effect/src` is authoritative for the pinned Effect API.
+5. Root research is comparison evidence only; verify a pattern before adapting it.
 
 Before changing protocol, discovery, heartbeat, streaming, errors, or wire
 schemas, read the affected upstream sections and
@@ -97,3 +102,11 @@ monorepo root. A full-protocol completion claim requires zero unmapped
 requirements, no accidental Agent SDK dependency, and a real NATS integration
 run. Record justified deviations next to their requirement IDs rather than
 weakening a test.
+
+## Extension boundary
+
+Non-standard durability, cancellation, control-plane, orchestration, and work-queue designs must be
+documented as local extension protocols outside Synadia's reserved subjects. They require explicit
+capability negotiation, vanilla-peer fallback, and their own ADR and test ledger. They never count
+toward the upstream conformance catalog and must not change standard v0.3 endpoint or reply-stream
+semantics.

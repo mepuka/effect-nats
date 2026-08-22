@@ -1,7 +1,7 @@
 /**
  * Robustness slices (TDD): host-side MUST enforcement, config validation,
  * numeric safety, and liveness hygiene. Seams: wire frames out of the host
- * pump, AgentClient surface, pure kernel functions.
+ * pump, AgentClient surface, and wire-contract functions.
  */
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Result, Stream } from "effect"
@@ -18,11 +18,11 @@ import { chunk, makeLoopbackBus, makeScriptedWire, msg, terminator, type Loopbac
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
-const IDENTITY = { agent: "cc", owner: "own", name: "main" }
+const ADDRESS = { agent: "cc", owner: "own", name: "main" }
 const PROMPT_SUBJECT = "agents.prompt.cc.own.main"
 
 const hostConfig = (overrides?: Partial<AgentHostConfig>): AgentHostConfig => ({
-  identity: IDENTITY,
+  address: ADDRESS,
   instanceId: "inst-r",
   handler: (req) => Stream.make({ _tag: "Text", text: `echo:${req.prompt}` } as const),
   ...overrides,
@@ -127,7 +127,7 @@ describe("host config validation", () => {
 })
 
 describe("client input validation", () => {
-  const identity = {
+  const agentInfo = {
     agent: "cc",
     owner: "own",
     instanceId: "z",
@@ -149,7 +149,7 @@ describe("client input validation", () => {
         const before = bus.log.length
         for (const inactivityMs of [0, -1, Number.NaN]) {
           const error = yield* Effect.flip(
-            Stream.runCollect(client.prompt(identity, "hi", { inactivityMs })),
+            Stream.runCollect(client.prompt(agentInfo, "hi", { inactivityMs })),
           )
           expect(error._tag).toBe("LocalViolation")
         }

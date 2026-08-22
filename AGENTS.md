@@ -9,6 +9,9 @@ This Bun workspace develops the principal Effect v4 NATS client and one subsyste
 The client public contract is under design; its root export stays empty until an ADR approves the
 first API surface. Agent-protocol work also reads `packages/agents/AGENTS.md`.
 
+Read `CONTEXT-MAP.md` before changing cross-package terminology or moving a capability between the
+principal NATS client and the Agents subsystem.
+
 ## Read before changing
 
 - **Client findings:** before client planning, implementation, or review, read `TO_FIX.md`.

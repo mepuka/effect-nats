@@ -1,7 +1,7 @@
 /**
- * Agent Protocol subject algebra — docs/01-SPEC.md §1, Protocol §2.
+ * Protocol-derived subject handling — docs/01-SPEC.md §1, upstream Protocol §2.
  *
- * Verb-first identity tree: `agents.{verb}.{agent}.{owner}.{name}`.
+ * Verb-first default subject tree: `agents.{verb}.{agent}.{owner}.{name}`.
  * Pure: no I/O. Wildcard matching is the single shared linear matcher from
  * `core/subjects.ts` (`*` = exactly one token, trailing `>` = one or more;
  * proved in github.com/mepuka/effect-nats-lean).

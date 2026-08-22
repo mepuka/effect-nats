@@ -34,7 +34,7 @@ const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
 const PROMPT_SUBJECT = "agents.prompt.hard.review.round2"
 
 const hostConfig = (overrides?: Partial<AgentHostConfig>): AgentHostConfig => ({
-  identity: { agent: "hard", owner: "review", name: "round2" },
+  address: { agent: "hard", owner: "review", name: "round2" },
   instanceId: "hardening-instance",
   heartbeatIntervalS: 30,
   handler: () => Stream.make({ _tag: "Text", text: "ok" } as const),
