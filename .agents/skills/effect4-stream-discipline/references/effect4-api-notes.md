@@ -10,17 +10,17 @@ grep -n "export declare" node_modules/effect/dist/Stream.d.ts | grep <name>
 
 ## Renames and reshapes that bite
 
-| You remember (v3) | rc.111 reality |
-|---|---|
-| `Effect.fork` | `Effect.forkChild(eff, { startImmediately?: boolean })`; also `forkScoped`, `forkIn`, `forkDetach` |
-| `Either.left/right` | `Result.fail/succeed`, `Result.isFailure/isSuccess`; `Effect.fromResult` |
-| `Schema.Union(A, B)` (variadic) | `Schema.Union([A, B])` — variadic form **crashes at runtime**: `members.map is not a function` |
-| `Schema.Record({ key, value })` | `Schema.Record(keySchema, valueSchema)` |
-| `Stream.unwrapScoped` | `Stream.unwrap` — signature `Effect<Stream<A,E2,R2>, E, R> → Stream<A, E \| E2, R2 \| Exclude<R, Scope>>`; it owns the scope |
-| `Stream.runCollect → Chunk<A>` | returns `Array<A>` |
-| `Schema.TaggedError` variants | `class E extends Schema.TaggedError<E>()("Tag", { field: Schema.String }) {}` — yieldable (`yield* new E({...})`), catch via `Effect.catchTag("Tag", ...)` |
-| custom passthrough decoding | `Schema.StructWithRest(Schema.Struct({...}), [Schema.Record(Schema.String, Schema.Unknown)])` |
-| `Schema.filter` refinements | `Schema.Number.pipe(Schema.check(Schema.isGreaterThan(0)))` and friends |
+| You remember (v3)               | rc.111 reality                                                                                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Effect.fork`                   | `Effect.forkChild(eff, { startImmediately?: boolean })`; also `forkScoped`, `forkIn`, `forkDetach`                                                         |
+| `Either.left/right`             | `Result.fail/succeed`, `Result.isFailure/isSuccess`; `Effect.fromResult`                                                                                   |
+| `Schema.Union(A, B)` (variadic) | `Schema.Union([A, B])` — variadic form **crashes at runtime**: `members.map is not a function`                                                             |
+| `Schema.Record({ key, value })` | `Schema.Record(keySchema, valueSchema)`                                                                                                                    |
+| `Stream.unwrapScoped`           | `Stream.unwrap` — signature `Effect<Stream<A,E2,R2>, E, R> → Stream<A, E \| E2, R2 \| Exclude<R, Scope>>`; it owns the scope                               |
+| `Stream.runCollect → Chunk<A>`  | returns `Array<A>`                                                                                                                                         |
+| `Schema.TaggedError` variants   | `class E extends Schema.TaggedError<E>()("Tag", { field: Schema.String }) {}` — yieldable (`yield* new E({...})`), catch via `Effect.catchTag("Tag", ...)` |
+| custom passthrough decoding     | `Schema.StructWithRest(Schema.Struct({...}), [Schema.Record(Schema.String, Schema.Unknown)])`                                                              |
+| `Schema.filter` refinements     | `Schema.Number.pipe(Schema.check(Schema.isGreaterThan(0)))` and friends                                                                                    |
 
 Other load-bearing facts:
 
@@ -50,7 +50,7 @@ Other load-bearing facts:
   timeout error).
 - **`Stream.takeWhile` stops pulling upstream** after the predicate fails —
   a `Stream.concat(upstream, sentinel)` continuation is only reached when
-  upstream ends *without* the terminating element (the S1 pattern).
+  upstream ends _without_ the terminating element (the S1 pattern).
 - **`Stream.fromAsyncIterable(it, onError)`** registers the iterator's
   `return` as a finalizer — but for resources with explicit lifecycle
   (subscriptions), still wrap acquisition in `Effect.acquireRelease` and
@@ -62,13 +62,13 @@ Other load-bearing facts:
 ## effect/testing
 
 ```ts
-import { TestClock, FastCheck as fc } from "effect/testing"
+import { FastCheck as fc, TestClock } from "effect/testing"
 ```
 
 - Provide with `Effect.provide(TestClock.layer())` — it provides the
   `Clock` service, so all `Effect.sleep` / `Schedule` / `Stream` timeouts
   are driven by `TestClock.adjust(millis)`.
-- `adjust` fires timers *registered at that moment*, running woken fibers
+- `adjust` fires timers _registered at that moment_, running woken fibers
   as it goes. Consumers must reach their first suspension before you
   adjust — hence:
 
@@ -76,9 +76,9 @@ import { TestClock, FastCheck as fc } from "effect/testing"
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
-const fiber = yield* forkNow(Effect.flip(Stream.runCollect(stream)))
-yield* TestClock.adjust(60_001)
-const typedError = yield* Fiber.join(fiber)     // flip: error surfaces as success
+const fiber = yield * forkNow(Effect.flip(Stream.runCollect(stream)))
+yield * TestClock.adjust(60_001)
+const typedError = yield * Fiber.join(fiber) // flip: error surfaces as success
 ```
 
 - `FastCheck` is a fast-check re-export. `Filter`-style arbitraries compose

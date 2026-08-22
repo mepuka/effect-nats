@@ -23,6 +23,25 @@ Exact rc-era API shapes live in [references/effect4-api-notes.md](references/eff
 The one-sentence version: **compiling is not done, green-once is not done;
 done is a claim you have made falsifiable and then failed to falsify.**
 
+## effect-nats applicability gate
+
+In this repository, use this skill as stream, concurrency, testing, and hardening evidence—not as
+NATS protocol authority. Read the repository's `effect-nats-implementation` and `tdd` skills plus
+the applicable official NATS source before applying a case study.
+
+- The case-study `ack · chunk* · error? · terminator` grammar belongs to a separate agent protocol;
+  it is not Core NATS, JetStream, KV, or Object Store wire grammar.
+- Copy the method—preserve wire facts, model legal sequences, bound resources, witness readiness,
+  and test interruption—not the example's frames, timeout, retry, or acknowledgement semantics.
+- Queue capacity and overflow are contract decisions. `Queue.dropping` in a case study is not a
+  default for Core subscriptions, KV watches, Object Store data, or any durable stream. Silent loss
+  is forbidden unless an accepted ADR explicitly defines a lossy observation API and diagnostics.
+- Callback-to-Queue bridges require proof of actual producer suspension or an explicit
+  overflow-to-error/unsubscribe/close policy. `Queue.offerUnsafe` does not create backpressure.
+- Every changed NATS operation needs a bidirectional outcome ledger from official responses,
+  statuses, errors, transport states, and wire branches to typed errors, Stream terminals, and
+  deterministic tests.
+
 ## The process
 
 Work these phases in order. Each exists because skipping it produced a
@@ -43,9 +62,9 @@ what makes the rest of the process cheap: every test below runs in
 milliseconds with zero servers and zero wall-clock sleeps. If you find
 yourself wanting `sleep` in a test, a seam is missing.
 
-The seam must carry *all* observable wire facts. We lost a protocol rule
+The seam must carry _all_ observable wire facts. We lost a protocol rule
 (zero-byte + headers ≠ terminator) because the seam originally dropped
-header *presence* and only kept parsed header values — the classifier could
+header _presence_ and only kept parsed header values — the classifier could
 not be right about data it never saw (case study S5).
 
 ### Phase 1 — Model invariants as data, then reuse the model everywhere
@@ -62,7 +81,7 @@ of the wire. Then use that ONE function three ways:
 
 We first wrote a boolean `wellFormed(first, hasError)` heuristic; it
 accepted empty streams, duplicate acks, and errors without terminators. The
-honest DFA replaced it and immediately exposed that the *caller* enforced
+honest DFA replaced it and immediately exposed that the _caller_ enforced
 nothing (case studies S4, and the model test in the suite). A property that
 compares your checker to an independent reference encoding is worth twenty
 example tests.
@@ -70,7 +89,7 @@ example tests.
 ### Phase 2 — Red before green, on the seams
 
 One slice at a time: write the failing test against a public seam, watch it
-fail for the *expected reason*, make the minimal change, watch it pass. Two
+fail for the _expected reason_, make the minimal change, watch it pass. Two
 Effect-4-specific mechanics matter here:
 
 - Fork test consumers with `Effect.forkChild(eff, { startImmediately: true })`
@@ -90,8 +109,8 @@ Both were tried in the source project; both were wrong. Instead:
 1. Extract a minimal probe script (inside the repo — see the two-copies trap
    in the API notes) that does ONE iteration of the failing thing with
    `performance.now()` timestamps and printed state.
-2. Find which await never returns, then ask: *what signal was this waiting
-   for, and who was supposed to send it, and had they started yet?*
+2. Find which await never returns, then ask: _what signal was this waiting
+   for, and who was supposed to send it, and had they started yet?_
 
 Our "500 round-trips exceeds 30s" heap test was not slow code — one probe
 showed a single round trip hung, a second probe printed the live
@@ -108,7 +127,7 @@ after the suite was fully green.
 
 **4a. Flake hunt.** Run the full suite in a loop (8–10×). Timing-dependent
 bugs and generator-dependent property failures hide behind single green
-runs. If CI differs from local, reproduce with the CI seed/config *before*
+runs. If CI differs from local, reproduce with the CI seed/config _before_
 patching — our CI failure reproduced with a different runtime version, not
 a different seed, which changed the correct fix from "tweak the test" to
 "pin the toolchain" (case study E2).
@@ -123,6 +142,7 @@ channel — a defect escaping a boundary is a bug even when no spec clause
 names it (case studies P2, and the hardening pass).
 
 **4c. Memory pass.** Three concrete tests, all cheap:
+
 - a **leak counter** on the test interpreter (`subscriptionCount()`):
   N completed operations + one interrupted mid-flight must return the count
   to baseline exactly;
@@ -136,7 +156,7 @@ names it (case studies P2, and the hardening pass).
   Clear any test-harness logs before measuring or you measure the harness.
 
 **4d. Witness audit.** For every readiness/registration/latch claim in the
-code, ask: *what does this actually witness, versus what does it claim?* A
+code, ask: _what does this actually witness, versus what does it claim?_ A
 latch that a failure path also releases witnesses "an attempt happened"
 while claiming "we are bound". This exact bug — `tapError` releasing a
 readiness `Deferred` so a transient subscribe failure faked registration —
@@ -163,7 +183,7 @@ You are done when ALL of these hold, and not before:
 
 1. **Read the installed `.d.ts`, not your memory.** Effect 4 renamed and
    reshaped APIs (`Effect.forkChild` not `fork`; `Schema.Union([members])`
-   array not variadic — variadic *runtime-crashes* with
+   array not variadic — variadic _runtime-crashes_ with
    `members.map is not a function`; `Result` not `Either`; `Stream.unwrap`
    not `unwrapScoped`). Verify signatures in `node_modules/effect/dist`
    before use. → api-notes.
@@ -171,7 +191,7 @@ You are done when ALL of these hold, and not before:
    that resets on every element. Place it where every observed frame
    (including ones you later filter) flows through it. → S2.
 3. **`Stream.unwrap` joins the effect's error channel into the stream's.**
-   Map seam errors to your domain errors *before* returning the stream, or
+   Map seam errors to your domain errors _before_ returning the stream, or
    the leak surfaces as a compile error far away. → S3.
 4. **Distinguish "upstream ended" from "protocol said end"** with a
    sentinel: `Stream.concat(frames, Stream.make(END))` — a legal terminator
@@ -183,7 +203,7 @@ You are done when ALL of these hold, and not before:
    never release. Layer construction awaits the latch so "constructed"
    means "bound". → C1, C2.
 7. **Ingestion never waits on user work; fan-out is still bounded.** Fork
-   per message *behind* a `Semaphore.takeIfAvailable` gate; overflow gets a
+   per message _behind_ a `Semaphore.takeIfAvailable` gate; overflow gets a
    cheap inline rejection, not a fiber. → C4.
 8. **Bounds need adversarial review of their own parameters.** Prune
    horizons computed from remote-controlled fields must clamp those fields;

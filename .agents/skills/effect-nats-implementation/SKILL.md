@@ -20,6 +20,11 @@ the pinned Effect v4 tree. Treat this skill as a change gate, not a source of pr
    - `docs/research/ecosystem-survey.md` only for comparative evidence.
 4. Read [references/testing-gates.md](references/testing-gates.md) before adding or changing tests,
    lifecycle, concurrency, retry, streaming, KV, or Object Store behavior.
+5. For feature, fix, stream, lifecycle, or integration-test work, invoke the repository-local
+   `tdd` skill and confirm the seam before writing the first red test.
+6. For stream, subscription, queue, fiber, readiness, timeout, or concurrency work, invoke the
+   repository-local `effect4-stream-discipline` skill. Apply its repair methods only after checking
+   the repository applicability gate and official NATS semantics.
 
 If a referenced document does not exist or does not cover the requested behavior, record that gap.
 Do not manufacture an API from analogy alone.
@@ -110,6 +115,9 @@ declared contract and compile it against the exact repository pin.
 - Preserve interruption. Cause-level recovery belongs only in a named supervisor.
 
 ### 3. Backpressure and lifecycle gate
+
+Review this gate first. A stream change cannot pass on API shape, happy-path values, or green tests
+alone.
 
 - Name every queue or buffer's capacity, overflow behavior, ownership, and shutdown behavior.
 - A bounded subscription contract states a positive finite capacity, its unit—messages, bytes, or

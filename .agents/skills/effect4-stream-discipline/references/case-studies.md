@@ -29,14 +29,15 @@ NATS agent-protocol runtime (reply streams shaped
 ---
 
 <a name="s1"></a>
+
 ## S1 — Upstream end vs protocol end
 
 **Symptom.** A reply stream whose subscription closed without ever sending
-the protocol terminator completed *successfully* — the caller could not
+the protocol terminator completed _successfully_ — the caller could not
 tell "the server finished" from "the connection evaporated".
 
 **Offending shape.** `Stream.takeWhile(f => f._tag !== "Terminator")` ends
-the stream on the terminator — but a plain upstream end *also* just ends
+the stream on the terminator — but a plain upstream end _also_ just ends
 the stream. Same observable outcome, different meanings.
 
 **Revealing test.** Scripted wire configured to end the reply stream after
@@ -60,13 +61,18 @@ type EngineFrame = Frame | { readonly _tag: "EndOfWire" }
 const END_OF_WIRE: EngineFrame = { _tag: "EndOfWire" }
 
 return Stream.concat(frames, Stream.make(END_OF_WIRE)).pipe(
-  Stream.timeoutOrElse({ duration, orElse: () => Stream.fail(new StreamTimeout({ inactivityMs })) }),
+  Stream.timeoutOrElse({
+    duration,
+    orElse: () => Stream.fail(new StreamTimeout({ inactivityMs }))
+  }),
   Stream.takeWhile((f) => f._tag !== "Terminator"),
   Stream.mapEffect((f) =>
-    f._tag === "ChunkFrame"  ? Effect.succeed(f.chunk)
-    : f._tag === "ErrorFrame" ? Effect.fail(new PromptFailed({ code: f.code, message: f.message }))
-    : Effect.fail(new ProtocolViolation({ reason: "reply stream ended without terminator" })),
-  ),
+    f._tag === "ChunkFrame"
+      ? Effect.succeed(f.chunk)
+      : f._tag === "ErrorFrame"
+      ? Effect.fail(new PromptFailed({ code: f.code, message: f.message }))
+      : Effect.fail(new ProtocolViolation({ reason: "reply stream ended without terminator" }))
+  )
 )
 ```
 
@@ -77,19 +83,20 @@ and let the type system force you to handle both.
 ---
 
 <a name="s2"></a>
+
 ## S2 — Idle-gap timeout is per-pull
 
-**Symptom risk.** The spec required "timeout N seconds since the *last
-observed message*" — a resetting idle timer. Hand-rolling this with races
+**Symptom risk.** The spec required "timeout N seconds since the _last
+observed message_" — a resetting idle timer. Hand-rolling this with races
 or `Stream.toPull` loops was the first (broken, wrong-API) attempt.
 
-**Repair.** In Effect 4, `Stream.timeoutOrElse` is checked *around each
-pull* — it already IS the resetting idle-gap timer:
+**Repair.** In Effect 4, `Stream.timeoutOrElse` is checked _around each
+pull_ — it already IS the resetting idle-gap timer:
 
 ```ts
 Stream.timeoutOrElse({
   duration: Duration.millis(inactivityMs),
-  orElse: () => Stream.fail(new StreamTimeout({ inactivityMs })),
+  orElse: () => Stream.fail(new StreamTimeout({ inactivityMs }))
 })
 ```
 
@@ -113,6 +120,7 @@ it.
 ---
 
 <a name="s3"></a>
+
 ## S3 — Error channel leaks through Stream.unwrap
 
 **Symptom.** Compile error far from the cause:
@@ -135,8 +143,8 @@ Stream.unwrap(Effect.gen(function* () {
 **Repair.** Map the seam error at the seam, before unwrap sees it:
 
 ```ts
-const replies = yield* wire.request(subject, payload).pipe(
-  Effect.mapError((e) => new TransportFailed({ reason: e.reason })),
+const replies = yield * wire.request(subject, payload).pipe(
+  Effect.mapError((e) => new TransportFailed({ reason: e.reason }))
 )
 ```
 
@@ -148,6 +156,7 @@ downstream" — downstream may only see one of the two channels.
 ---
 
 <a name="s4"></a>
+
 ## S4 — The consumer enforced nothing (DFA)
 
 **Symptom.** The caller accepted: a bare terminator (yielding a successful
@@ -177,12 +186,22 @@ stream instance:
 ```ts
 export const stepWellFormed = (state: PumpState, frame: Frame): PumpState | null => {
   switch (state) {
-    case "AwaitAck":  return frame._tag === "ChunkFrame" ? (isAck(frame.chunk) ? "Streaming" : null)
-                         : frame._tag === "ErrorFrame" ? "ErrorSent" : null
-    case "Streaming": return frame._tag === "ChunkFrame" ? (isAck(frame.chunk) ? null : "Streaming")
-                         : frame._tag === "ErrorFrame" ? "ErrorSent" : "Done"
-    case "ErrorSent": return frame._tag === "Terminator" ? "Done" : null
-    case "Done":      return null
+    case "AwaitAck":
+      return frame._tag === "ChunkFrame"
+        ? (isAck(frame.chunk) ? "Streaming" : null)
+        : frame._tag === "ErrorFrame"
+        ? "ErrorSent"
+        : null
+    case "Streaming":
+      return frame._tag === "ChunkFrame"
+        ? (isAck(frame.chunk) ? null : "Streaming")
+        : frame._tag === "ErrorFrame"
+        ? "ErrorSent"
+        : "Done"
+    case "ErrorSent":
+      return frame._tag === "Terminator" ? "Done" : null
+    case "Done":
+      return null
   }
 }
 
@@ -191,22 +210,30 @@ let state: PumpState = PUMP_START
 Stream.mapEffect((m) =>
   Effect.flatMap(Effect.fromResult(classify(m)), (frame) => {
     const next = stepWellFormed(state, frame)
-    if (next === null) return Effect.fail(new ProtocolViolation({
-      reason: `illegal ${frame._tag} while ${state} (reply DFA)`,
-    }))
+    if (next === null) {
+      return Effect.fail(
+        new ProtocolViolation({
+          reason: `illegal ${frame._tag} while ${state} (reply DFA)`
+        })
+      )
+    }
     state = next
     return Effect.succeed(frame)
-  }),
+  })
 )
 ```
 
 And the oracle test that keeps the DFA honest:
 
 ```ts
-const REFERENCE = /^(A[C]*E?T|ET)$/   // independent encoding of the grammar
-fc.assert(fc.property(fc.array(frameArb, { maxLength: 8 }), (frames) =>
-  wellFormed(frames) === REFERENCE.test(frames.map(symbolOf).join(""))
-), { numRuns: 2000 })
+const REFERENCE = /^(A[C]*E?T|ET)$/ // independent encoding of the grammar
+fc.assert(
+  fc.property(
+    fc.array(frameArb, { maxLength: 8 }),
+    (frames) => wellFormed(frames) === REFERENCE.test(frames.map(symbolOf).join(""))
+  ),
+  { numRuns: 2000 }
+)
 ```
 
 **Principle.** A sequence invariant that lives only in prose is enforced
@@ -217,12 +244,13 @@ it honest; one user lets it rot.
 ---
 
 <a name="s5"></a>
+
 ## S5 — The seam dropped a wire fact
 
-**Symptom.** The protocol says a terminator is a zero-byte message *with no
-headers*; a zero-byte message WITH headers is not a terminator. The
+**Symptom.** The protocol says a terminator is a zero-byte message _with no
+headers_; a zero-byte message WITH headers is not a terminator. The
 original seam type only carried parsed error-header values — header
-*presence* was gone, so the classifier literally could not implement the
+_presence_ was gone, so the classifier literally could not implement the
 rule.
 
 **Offending seam.**
@@ -230,7 +258,7 @@ rule.
 ```ts
 interface ReplyMessage {
   readonly payload: Uint8Array
-  readonly errorCode?: number    // parsed — presence of OTHER headers lost
+  readonly errorCode?: number // parsed — presence of OTHER headers lost
   readonly errorMessage?: string
 }
 ```
@@ -240,7 +268,7 @@ interface ReplyMessage {
 ```ts
 interface ReplyMessage {
   readonly payload: Uint8Array
-  readonly hasHeaders: boolean   // the fact the rule needs
+  readonly hasHeaders: boolean // the fact the rule needs
   readonly errorCode?: number | undefined
   readonly errorMessage?: string | undefined
   readonly replyTo?: string | undefined
@@ -261,7 +289,7 @@ const error = await runScripted(
 expect(error._tag).toBe("ProtocolViolation")
 ```
 
-**Principle.** Audit the seam against the spec's *distinctions*, not its
+**Principle.** Audit the seam against the spec's _distinctions_, not its
 happy paths: for every rule of the form "X but not when Y", the seam must
 carry enough to observe Y. Design the seam from the rules, then write the
 interpreter.
@@ -269,6 +297,7 @@ interpreter.
 ---
 
 <a name="s6"></a>
+
 ## S6 — Async-iterator bridges deadlock interruption
 
 **Symptom.** The entire live-broker integration suite hung — every test,
@@ -283,9 +312,9 @@ construction with a logging wire decorator → all subscriptions bound in
 hypothesis): can a sleep win a race against an idle subscription?
 
 ```ts
-const winner = yield* Effect.race(
+const winner = yield * Effect.race(
   Effect.as(Stream.runCollect(msgs), "collected"),
-  Effect.as(Effect.sleep(500), "slept"),
+  Effect.as(Effect.sleep(500), "slept")
 )
 // hung forever — the sleep FIRED, but the race could not finish
 ```
@@ -343,6 +372,7 @@ fakes are Effect-native and interrupt too politely to catch this class.
 ---
 
 <a name="c1"></a>
+
 ## C1 — Fork-then-return: the fake-ready race
 
 **Symptom.** A heap test doing 500 request/response round trips timed out
@@ -381,22 +411,23 @@ construction awaits all of them; dependent loops (heartbeats, per spec
 "only after registration") start after the await:
 
 ```ts
-const bound = yield* Deferred.make<void>()
-const msgs = yield* wire.subscribe(subject, { queueGroup }).pipe(
-  Effect.tap(() => Deferred.succeed(bound, void 0)),
+const bound = yield * Deferred.make<void>()
+const msgs = yield * wire.subscribe(subject, { queueGroup }).pipe(
+  Effect.tap(() => Deferred.succeed(bound, void 0))
 )
 // ...fork all loops, collect their Deferreds...
-yield* Effect.all(bounds.map(Deferred.await))   // constructed ⇔ bound
-yield* supervised(heartbeatLoop)                // starts only after registration
+yield * Effect.all(bounds.map(Deferred.await)) // constructed ⇔ bound
+yield * supervised(heartbeatLoop) // starts only after registration
 ```
 
-**Principle.** `forkScoped` + return is a *claim* of readiness with no
+**Principle.** `forkScoped` + return is a _claim_ of readiness with no
 witness. Anything that says "started/registered/subscribed" must await a
 signal produced by the actual success of that operation.
 
 ---
 
 <a name="c2"></a>
+
 ## C2 — The lying latch: released on failure
 
 **Symptom.** The C1 fix itself shipped a subtler bug that survived a fully
@@ -410,7 +441,7 @@ down":
 ```ts
 wire.subscribe(subject, { queueGroup }).pipe(
   Effect.tap(() => Deferred.succeed(bound, void 0)),
-  Effect.tapError(() => Deferred.succeed(bound, void 0)),  // ← the lie
+  Effect.tapError(() => Deferred.succeed(bound, void 0)) // ← the lie
 )
 ```
 
@@ -432,7 +463,7 @@ const flakyWire: WireShape = {
       failedOnce.add(subject)
       return Effect.fail(new WireFailure({ reason: "transient subscribe failure" }))
     }
-  })(),
+  })()
 }
 // build layer (restartMs: 50), publish immediately, adjust past the retry,
 // expect the full reply — red before the fix (stream timed out, prompt lost)
@@ -447,12 +478,13 @@ want bounded startup can race the layer with their own timeout.
 **Principle.** For any latch/flag/readiness bit, enumerate every code path
 that sets it and ask what each path actually proves. A latch with a
 failure-path release proves "an attempt happened". Also: run the witness
-audit *again after* fixing a race — the fix is new concurrent code and
+audit _again after_ fixing a race — the fix is new concurrent code and
 deserves the same suspicion that found the original.
 
 ---
 
 <a name="c3"></a>
+
 ## C3 — TestClock and fibers that never started
 
 **Symptom.** `error TS2339: Property 'fork' does not exist` — then, after
@@ -472,26 +504,27 @@ const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
   Effect.forkChild(effect, { startImmediately: true })
 
 // pattern:
-const fiber = yield* forkNow(Effect.flip(Stream.runCollect(stream)))
-yield* TestClock.adjust(60_001)
-const error = yield* Fiber.join(fiber)
+const fiber = yield * forkNow(Effect.flip(Stream.runCollect(stream)))
+yield * TestClock.adjust(60_001)
+const error = yield * Fiber.join(fiber)
 ```
 
 Also: extract typed failures with `Effect.flip` and join the flipped fiber
 — cleaner than digging through `Exit`/`Cause` internals, whose shapes
 shifted in 4.x.
 
-**Principle.** `TestClock.adjust` fires *registered* timers. Determinism
+**Principle.** `TestClock.adjust` fires _registered_ timers. Determinism
 requires the consumer fiber to reach its first suspension before the clock
 moves — `startImmediately: true` guarantees exactly that.
 
 ---
 
 <a name="c4"></a>
+
 ## C4 — Bounded fan-out without blocking ingestion
 
 **Symptom (review finding).** The ingestion loop forked one fiber per
-inbound message *before* admission control decided anything — correct that
+inbound message _before_ admission control decided anything — correct that
 broker ingestion never waits on user work, but a burst of 100k messages
 creates 100k waiting/validating fibers even though handler concurrency was
 bounded at 1.
@@ -499,7 +532,7 @@ bounded at 1.
 **Offending code.**
 
 ```ts
-Stream.runForEach((m) => Effect.forkScoped(respond(m)))   // unbounded pre-admission
+Stream.runForEach((m) => Effect.forkScoped(respond(m))) // unbounded pre-admission
 ```
 
 **Repair.** Two semaphores: `admission` bounds in-flight handlers (overflow
@@ -515,8 +548,8 @@ Stream.runForEach((m) =>
   Effect.flatMap(Semaphore.takeIfAvailable(pending, 1), (took) =>
     took
       ? Effect.forkScoped(respond(m).pipe(Effect.ensuring(Semaphore.release(pending, 1))))
-      : overloaded(m),     // inline: error(429) then terminator, then continue ingesting
-  ),
+      : overloaded(m) // inline: error(429) then terminator, then continue ingesting
+  )
 )
 ```
 
@@ -533,6 +566,7 @@ interruption can't leak them.
 ---
 
 <a name="p1"></a>
+
 ## P1 — The "slow" test that was a race
 
 **Symptom.** Heap test: 500 request/response round trips. Timed out at the
@@ -542,20 +576,20 @@ been raising it further or "optimizing".
 **Process that found it.**
 
 1. Probe script, ONE round trip, `performance.now()` prints → hung with no
-   output at all. So not slow: *stuck*. (First probe also crashed with an
+   output at all. So not slow: _stuck_. (First probe also crashed with an
    effect-internals `yieldWrapGet` bug — see E1 — worth recognizing fast.)
 2. Second probe printed observable state on a cadence:
 
 ```ts
 for (let i = 0; i < 10; i++) {
-  yield* Effect.sleep(50)
+  yield * Effect.sleep(50)
   console.log(`t+${(i + 1) * 50}ms subs=${bus.subscriptionCount()}`)
 }
 // → subs=9, forever. The waiter wanted 10. Count the real loops: 8 server + 1 client = 9.
 ```
 
 The hang was an off-by-one in the probe's own readiness wait — and pulling
-that thread exposed that the *tests* had no principled readiness at all
+that thread exposed that the _tests_ had no principled readiness at all
 (the `TestClock.adjust(1)` ritual), which led to C1/C2.
 
 3. After the readiness fix: 500 round trips = **141ms** (~280µs each). The
@@ -569,6 +603,7 @@ probe is code too — check its own assumptions when it misbehaves.
 ---
 
 <a name="p2"></a>
+
 ## P2 — Unbounded maps and hostile numbers
 
 Three linked repair cycles on one liveness tracker (a map keyed by remote
@@ -576,7 +611,7 @@ Three linked repair cycles on one liveness tracker (a map keyed by remote
 
 **Cycle 1 — unbounded growth.** Every instance ever seen was retained
 forever. Red test: publish a beat, advance the clock far past any horizon,
-publish a beat for a *different* instance (pruning ran on beats), assert
+publish a beat for a _different_ instance (pruning ran on beats), assert
 the stale entry is gone. Repair: prune stale entries on each recorded beat.
 
 **Cycle 2 — the attacker controls the expiry math.** Review question: what
@@ -612,19 +647,20 @@ typed rejection, not in arithmetic.
 ---
 
 <a name="p3"></a>
+
 ## P3 — Hot-path allocations and honest queues
 
 **Allocation.** `new TextDecoder(...)` / `new TextEncoder()` were
-constructed *per message* in the classifier, heartbeat decoder, and every
+constructed _per message_ in the classifier, heartbeat decoder, and every
 publish. Non-streaming `decode()` is stateless, so share module-level
 singletons:
 
 ```ts
-const decoder = new TextDecoder("utf-8", { fatal: false })   // module level, once
+const decoder = new TextDecoder("utf-8", { fatal: false }) // module level, once
 const encoder = new TextEncoder()
 ```
 
-(One decoder per *purpose*: the request-boundary decoder is
+(One decoder per _purpose_: the request-boundary decoder is
 `{ fatal: true }` because invalid UTF-8 there must become a typed 400, not
 silent U+FFFD replacement — a separate repair cycle found via adversarial
 input `Uint8Array.of(0xff)`.)
@@ -645,6 +681,7 @@ behavior.
 ---
 
 <a name="p4"></a>
+
 ## P4 — Leak counters and heap smoke tests
 
 Memory claims need tests or they are hopes. Three cheap, deterministic
@@ -657,9 +694,10 @@ mechanisms:
 const baseline = bus.subscriptionCount()
 for (let i = 0; i < 25; i++) { /* full round trip, joined */ }
 expect(bus.subscriptionCount()).toBe(baseline)
-const hung = yield* forkNow(Stream.runCollect(client.prompt(identity, "hang")))
-yield* TestClock.adjust(1); yield* Fiber.interrupt(hung)
-expect(bus.subscriptionCount()).toBe(baseline)   // interruption releases exactly once
+const hung = yield * forkNow(Stream.runCollect(client.prompt(identity, "hang")))
+yield * TestClock.adjust(1)
+yield * Fiber.interrupt(hung)
+expect(bus.subscriptionCount()).toBe(baseline) // interruption releases exactly once
 ```
 
 This works because release is an explicit `Effect.acquireRelease` finalizer
@@ -670,11 +708,14 @@ fixed bound; clear harness logs before measuring or you measure the
 harness:
 
 ```ts
-const heapUsedAfterGc = () => { Bun.gc(true); return process.memoryUsage().heapUsed }
-for (let i = 0; i < 50; i++) yield* roundTrip(i)     // warm-up
+const heapUsedAfterGc = () => {
+  Bun.gc(true)
+  return process.memoryUsage().heapUsed
+}
+for (let i = 0; i < 50; i++) yield * roundTrip(i) // warm-up
 bus.log.length = 0
 const before = heapUsedAfterGc()
-for (let i = 0; i < 500; i++) yield* roundTrip(i)
+for (let i = 0; i < 500; i++) yield * roundTrip(i)
 bus.log.length = 0
 expect(heapUsedAfterGc() - before).toBeLessThan(25 * 1024 * 1024)
 ```
@@ -685,14 +726,15 @@ caught. Wait for a witnessed condition, not a sleep. (The interim
 poll-until-quiescent helper was retired once construction itself witnessed
 readiness — the right fix removed the need.)
 
-**Principle.** Leak detection wants an *exact* counter at a seam
+**Principle.** Leak detection wants an _exact_ counter at a seam
 (baseline in/out equality, including an interrupted path); heap growth
-wants a *generous* bound (absorb JIT noise, still catch real leaks). Use
+wants a _generous_ bound (absorb JIT noise, still catch real leaks). Use
 both; they fail on different bugs.
 
 ---
 
 <a name="e1"></a>
+
 ## E1 — Two copies of effect
 
 **Symptom.** Probe script crashes inside effect internals:
@@ -716,6 +758,7 @@ resolution before filing anything.
 ---
 
 <a name="e2"></a>
+
 ## E2 — CI green-red split: pin what you verified
 
 **Symptom.** Full suite green locally for dozens of runs; first CI run
@@ -727,17 +770,17 @@ Property failed after 1 tests
 Counterexample: [{__proto__:null,"_tag":"Move","dx":0}]
 ```
 
-**Diagnosis before patching.** Reproduce with the CI *seed* locally:
+**Diagnosis before patching.** Reproduce with the CI _seed_ locally:
 
 ```ts
 await new TestSchema.Asserts(DeviceEvent).verifyLosslessTransformation({
-  params: { numRuns: 200, seed: -466859633 },
+  params: { numRuns: 200, seed: -466859633 }
 })
 // → PASSES locally
 ```
 
 Same seed, same lockfile, different outcome ⇒ not the seed, the
-*environment*: CI ran `bun-version: latest`, local was 1.3.14, and the
+_environment_: CI ran `bun-version: latest`, local was 1.3.14, and the
 newer runtime diverges on null-prototype object equality inside the test
 framework. That flips the correct fix from "tweak the test/seed" to:
 
@@ -748,7 +791,7 @@ framework. That flips the correct fix from "tweak the test/seed" to:
 ```
 
 **Principle.** Never patch a CI-only failure until you have reproduced it —
-the reproduction *attempt* is the diagnosis. Seed reproduces → generator
+the reproduction _attempt_ is the diagnosis. Seed reproduces → generator
 edge case (fix code or generator). Seed does not reproduce → environment
 delta (pin the toolchain you actually verified; upgrade deliberately
 later). CI on "latest" anything tests a moving target.
@@ -756,6 +799,7 @@ later). CI on "latest" anything tests a moving target.
 ---
 
 <a name="e3"></a>
+
 ## E3 — Effect 3 memory produces Effect 4 crashes
 
 A compressed list of the rc.111 API-shape traps that produced real compile
@@ -782,5 +826,5 @@ in [effect4-api-notes.md](effect4-api-notes.md):
 
 **Principle.** The installed package is the only authority:
 `grep "export declare" node_modules/effect/dist/<Module>.d.ts` before
-using any API you have not used *in this exact version*. Ten seconds of
+using any API you have not used _in this exact version_. Ten seconds of
 grep beats a module-load-time crash in someone else's test run.
