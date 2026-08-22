@@ -3,7 +3,9 @@
 [![CI](https://github.com/mepuka/effect-nats/actions/workflows/ci.yml/badge.svg)](https://github.com/mepuka/effect-nats/actions/workflows/ci.yml)
 [![NATS upstream canary](https://github.com/mepuka/effect-nats/actions/workflows/nats-upstream-canary.yml/badge.svg)](https://github.com/mepuka/effect-nats/actions/workflows/nats-upstream-canary.yml)
 
-An Effect v4 and Bun monorepo for NATS infrastructure and agent workflows.
+An Effect v4 and Bun monorepo for [NATS](https://nats.io) infrastructure and agent workflows,
+built over the official [`nats-server`](https://github.com/nats-io/nats-server) and
+[`nats.js`](https://github.com/nats-io/nats.js) projects.
 
 > **Status:** active pre-release implementation. Neither package has a released public API, and
 > this project is not endorsed by the NATS or Synadia projects.
