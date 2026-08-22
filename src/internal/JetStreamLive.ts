@@ -39,6 +39,24 @@ const attempt = <T>(run: () => Promise<T>): Effect.Effect<Attempt<T>> =>
     )
   )
 
+// ADR-0004 rule 2: JSON-number sequences convert only when provably exact.
+// The typed SequenceNotProvablyExact channel arrives with the DIRECT.GET
+// lastMessage slice; until then an unsafe value is a loud defect, never a
+// silently rounded bigint.
+const toSequence = (value: number, operation: string): bigint => {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`SequenceNotProvablyExact: ${operation} received ${value} beyond 2^53`)
+  }
+  return BigInt(value)
+}
+
+const fromSequence = (value: bigint, operation: string): number => {
+  if (value > 9007199254740991n) {
+    throw new Error(`SequenceNotProvablyExact: ${operation} cannot carry ${value} beyond 2^53`)
+  }
+  return Number(value)
+}
+
 const errCode = (cause: unknown): number | undefined =>
   cause instanceof JetStreamApiError ? cause.apiError().err_code : undefined
 
@@ -130,15 +148,16 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
 
       publish: (stream, subject, payload, options) =>
         Effect.gen(function*() {
-          const hdrs = toMsgHdrs(options?.headers)
           const expected = options?.expectedLastSubjectSequence
+          // ADR-0004 rule 3: the CAS expectation is formatted from the bigint
+          // by this adapter, never via a lossy number option
+          const hdrs = toMsgHdrs(options?.headers)
+            ?? (expected !== undefined ? makeHeaders() : undefined)
+          if (expected !== undefined && hdrs !== undefined) {
+            hdrs.set("Nats-Expected-Last-Subject-Sequence", `${expected}`)
+          }
           const result = yield* attempt(() =>
-            js.publish(subject, payload, {
-              ...(hdrs !== undefined ? { headers: hdrs } : {}),
-              ...(expected !== undefined
-                ? { expect: { lastSubjectSequence: Number(expected) } }
-                : {})
-            })
+            js.publish(subject, payload, hdrs !== undefined ? { headers: hdrs } : {})
           )
           if (result._tag === "ok") {
             // subject-routed: another stream capturing the publish means the
@@ -146,7 +165,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
             if (result.value.stream !== stream) {
               return yield* new StreamNotFound({ stream })
             }
-            return BigInt(result.value.seq)
+            return toSequence(result.value.seq, "publish PubAck.seq")
           }
           const cause = result.cause
           const message = messageOf(cause)
@@ -195,7 +214,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
           }
           return {
             subject: stored.subject,
-            sequence: BigInt(stored.seq),
+            sequence: toSequence(stored.seq, "lastMessageForSubject StoredMsg.seq"),
             payload: stored.data,
             headers: fromMsgHdrs(stored.header),
             timestampMillis: stored.time.getTime()
@@ -234,7 +253,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 ...(start._tag === "FromSequence"
                   ? {
                     deliver_policy: DeliverPolicy.StartSequence,
-                    opt_start_seq: Number(start.sequence)
+                    // lib option is number-typed; refuse a start beyond 2^53
+                    // rather than silently rounding the bigint (ADR-0004)
+                    opt_start_seq: fromSequence(start.sequence, "consume opt_start_seq")
                   }
                   : {})
               })
@@ -264,7 +285,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 _tag: "Entry",
                 message: {
                   subject: message.subject,
-                  sequence: BigInt(message.info.streamSequence),
+                  sequence: toSequence(message.info.streamSequence, "consume streamSequence"),
                   payload: message.data,
                   headers: fromMsgHdrs(message.headers),
                   timestampMillis: message.time.getTime()
