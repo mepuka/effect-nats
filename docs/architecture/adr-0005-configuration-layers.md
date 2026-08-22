@@ -64,7 +64,8 @@ Replaced with an explicit per-subscription policy:
 
 KV watch, keys, and history run on `TerminateOnLag` and surface the overflow as a typed
 `KvWatchLagged` outcome carrying the last observed revision — the gap is explicit and
-resumable via `fromRevision`. Core push subscriptions (future slice) get finite message/byte
+resumable via the exclusive `afterRevision` position defined by ADR-0008. Core push
+subscriptions (future slice) get finite message/byte
 caps with a typed slow-consumer error by default.
 
 ## Consequences

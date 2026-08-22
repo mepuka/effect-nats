@@ -58,11 +58,14 @@ export interface WatchOptions {
   /** Raw selector, parsed against the strict filter grammar (ADR-0003). */
   readonly selector?: string
   readonly updatesOnly?: boolean
+  /** Inclusive replay beginning at this revision. */
   readonly fromRevision?: bigint
+  /** Exclusive replay beginning strictly after this revision. */
+  readonly afterRevision?: bigint
   /**
    * Watch buffer bound (default 1024). Overflow terminates the watch with a
    * typed `KvWatchLagged` carrying the last observed revision (ADR-0005);
-   * resume with `fromRevision: lastRevision + 1n`.
+   * resume with `afterRevision: lastRevision`.
    */
   readonly bufferMessages?: number
 }
@@ -93,6 +96,16 @@ export class KvInvalidFilter extends Schema.TaggedError<KvInvalidFilter>()("KvIn
   selector: Schema.String
 }) {}
 
+/** Programmer defect: a watch cannot have both inclusive and exclusive resume positions. */
+export class ConflictingWatchResume extends Error {
+  readonly _tag = "ConflictingWatchResume" as const
+
+  constructor() {
+    super("WatchOptions cannot set both fromRevision and afterRevision")
+    this.name = "ConflictingWatchResume"
+  }
+}
+
 /** A wire entry violating the naming or operation grammar (ADR-0003: reads fail typed). */
 export class KvEntryViolation extends Schema.TaggedError<KvEntryViolation>()("KvEntryViolation", {
   bucket: Schema.String,
@@ -100,7 +113,7 @@ export class KvEntryViolation extends Schema.TaggedError<KvEntryViolation>()("Kv
   reason: Schema.Literals(["prefix-mismatch", "invalid-key", "invalid-operation"])
 }) {}
 
-/** The watch buffer overflowed (ADR-0005); resume from `lastRevision + 1n`. */
+/** The watch buffer overflowed; resume with `afterRevision: lastRevision`. */
 export class KvWatchLagged extends Schema.TaggedError<KvWatchLagged>()("KvWatchLagged", {
   bucket: Schema.String,
   lastRevision: Schema.BigInt
@@ -264,11 +277,19 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
         onSuccess: (key) => toEntry(key, message)
       })
 
-    const startFor = (options?: WatchOptions): StartPosition => {
-      if (options?.fromRevision !== undefined) {
-        return { _tag: "FromSequence", sequence: options.fromRevision }
+    const startFor = (options?: WatchOptions): Effect.Effect<StartPosition> => {
+      if (options?.fromRevision !== undefined && options.afterRevision !== undefined) {
+        return Effect.die(new ConflictingWatchResume())
       }
-      return options?.updatesOnly === true ? { _tag: "NewOnly" } : { _tag: "LastPerSubject" }
+      if (options?.afterRevision !== undefined) {
+        return Effect.succeed({ _tag: "AfterSequence", sequence: options.afterRevision })
+      }
+      if (options?.fromRevision !== undefined) {
+        return Effect.succeed({ _tag: "FromSequence", sequence: options.fromRevision })
+      }
+      return Effect.succeed(
+        options?.updatesOnly === true ? { _tag: "NewOnly" } : { _tag: "LastPerSubject" }
+      )
     }
 
     const filterFor = (
@@ -287,10 +308,11 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
     const events = (options?: WatchOptions) =>
       Stream.unwrap(
         Effect.gen(function*() {
+          const start = yield* startFor(options)
           const filter = yield* resultToEffect(filterFor(options))
           return substrate.consume(stream, {
             filters: [filter],
-            start: startFor(options),
+            start,
             buffer: { _tag: "TerminateOnLag", messages: options?.bufferMessages ?? 1024 }
           }).pipe(
             Stream.mapError(consumeError),

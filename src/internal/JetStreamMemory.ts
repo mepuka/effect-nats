@@ -16,6 +16,7 @@ import {
   StreamConfigConflict,
   StreamNotFound,
   SubjectNotBound,
+  validateConsumeBuffer,
   WrongLastSequence
 } from "./JetStream.ts"
 import type { ConsumeBuffer } from "./JetStream.ts"
@@ -74,6 +75,10 @@ const selectReplay = (
     case "FromSequence": {
       const from = options.start.sequence
       return matching.filter((message) => message.sequence >= from)
+    }
+    case "AfterSequence": {
+      const after = options.start.sequence
+      return matching.filter((message) => message.sequence > after)
     }
     case "LastPerSubject": {
       const last = new Map<string, StoredMessage>()
@@ -214,36 +219,40 @@ export const make: Effect.Effect<MemoryJetStream> = Effect.gen(function*() {
 
     consume: (stream, options) =>
       Stream.unwrap(
-        Semaphore.withPermit(lock)(
-          Effect.gen(function*() {
-            const state = yield* requireStream(stream)
-            const queue = yield* Effect.acquireRelease(
-              Queue.bounded<StoredMessage, StreamNotFound | ConsumerLagged>(
-                options.buffer.messages
-              ),
-              (q) => Queue.shutdown(q)
+        validateConsumeBuffer(options.buffer).pipe(
+          Effect.andThen(
+            Semaphore.withPermit(lock)(
+              Effect.gen(function*() {
+                const state = yield* requireStream(stream)
+                const queue = yield* Effect.acquireRelease(
+                  Queue.bounded<StoredMessage, StreamNotFound | ConsumerLagged>(
+                    options.buffer.messages
+                  ),
+                  (q) => Queue.shutdown(q)
+                )
+                const subscriber: Subscriber = {
+                  queue,
+                  filters: options.filters,
+                  buffer: options.buffer,
+                  // resume point before any live delivery: the head at registration
+                  lastDelivered: state.nextSequence - 1n
+                }
+                // Registration before snapshot selection, both under the permit:
+                // no message can land between snapshot and live (case C1).
+                yield* Effect.acquireRelease(
+                  Effect.sync(() => state.subscribers.add(subscriber)),
+                  () => Effect.sync(() => state.subscribers.delete(subscriber))
+                )
+                const snapshot = selectReplay(state.messages, options)
+                const entry = (message: StoredMessage): ConsumeEvent => ({ _tag: "Entry", message })
+                const caughtUp: ConsumeEvent = { _tag: "CaughtUp" }
+                return Stream.fromIterable(snapshot.map(entry)).pipe(
+                  Stream.concat(Stream.make(caughtUp)),
+                  Stream.concat(Stream.fromQueue(queue).pipe(Stream.map(entry)))
+                )
+              })
             )
-            const subscriber: Subscriber = {
-              queue,
-              filters: options.filters,
-              buffer: options.buffer,
-              // resume point before any live delivery: the head at registration
-              lastDelivered: state.nextSequence - 1n
-            }
-            // Registration before snapshot selection, both under the permit:
-            // no message can land between snapshot and live (case C1).
-            yield* Effect.acquireRelease(
-              Effect.sync(() => state.subscribers.add(subscriber)),
-              () => Effect.sync(() => state.subscribers.delete(subscriber))
-            )
-            const snapshot = selectReplay(state.messages, options)
-            const entry = (message: StoredMessage): ConsumeEvent => ({ _tag: "Entry", message })
-            const caughtUp: ConsumeEvent = { _tag: "CaughtUp" }
-            return Stream.fromIterable(snapshot.map(entry)).pipe(
-              Stream.concat(Stream.make(caughtUp)),
-              Stream.concat(Stream.fromQueue(queue).pipe(Stream.map(entry)))
-            )
-          })
+          )
         )
       )
   })

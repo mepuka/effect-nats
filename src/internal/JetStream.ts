@@ -1,5 +1,5 @@
-import type { Effect, Stream } from "effect"
-import { Context, Schema } from "effect"
+import type { Stream } from "effect"
+import { Context, Effect, Schema } from "effect"
 
 // The JetStream substrate seam: the minimal stream-store contract KV consumes
 // (kv-slice-scoping.md). Implemented by the in-memory interpreter for tests and
@@ -32,6 +32,7 @@ export type StartPosition =
   | { readonly _tag: "LastPerSubject" }
   | { readonly _tag: "NewOnly" }
   | { readonly _tag: "FromSequence"; readonly sequence: bigint }
+  | { readonly _tag: "AfterSequence"; readonly sequence: bigint }
 
 export interface PublishOptions {
   /** Per-subject compare-and-set: 0n asserts the subject has no message yet. */
@@ -45,11 +46,34 @@ export interface PublishOptions {
  * producer): a full buffer suspends the producer. `TerminateOnLag` is for
  * producers that cannot be suspended: a full buffer terminates the subscription
  * with a typed `ConsumerLagged` carrying the last delivered sequence, so the
- * consumer can resume from a known position. Silent loss is not offered.
+ * consumer can resume from a known position. `messages` must be a positive
+ * integer; invalid capacities die before subscription resources are acquired.
+ *
+ * Memory-interpreter limitation: a full `PullWindow` suspends `publish` while
+ * it holds the interpreter's global mutation permit, temporarily stalling every
+ * operation on every memory stream. Silent loss is not offered.
  */
 export type ConsumeBuffer =
   | { readonly _tag: "PullWindow"; readonly messages: number }
   | { readonly _tag: "TerminateOnLag"; readonly messages: number }
+
+/** Programmer defect: a subscription buffer requires a positive integer capacity. */
+export class InvalidConsumeBuffer extends Error {
+  readonly _tag = "InvalidConsumeBuffer" as const
+  readonly messages: number
+
+  constructor(messages: number) {
+    super(`ConsumeBuffer.messages must be a positive integer; received ${messages}`)
+    this.name = "InvalidConsumeBuffer"
+    this.messages = messages
+  }
+}
+
+/** Validate the common buffer domain before an interpreter acquires resources. */
+export const validateConsumeBuffer = (buffer: ConsumeBuffer): Effect.Effect<void> =>
+  Number.isInteger(buffer.messages) && buffer.messages >= 1
+    ? Effect.void
+    : Effect.die(new InvalidConsumeBuffer(buffer.messages))
 
 export interface ConsumeOptions {
   readonly filters: ReadonlyArray<string>
@@ -98,7 +122,11 @@ export class RollupNotPermitted
   })
 {}
 
-/** A TerminateOnLag subscription overflowed; resume from `lastDeliveredSequence`. */
+/**
+ * A `TerminateOnLag` subscription overflowed. Buffered entries drain before
+ * this failure is observed, so `lastDeliveredSequence` is the final sequence
+ * delivered downstream. Resume with `AfterSequence(lastDeliveredSequence)`.
+ */
 export class ConsumerLagged extends Schema.TaggedError<ConsumerLagged>()("ConsumerLagged", {
   stream: Schema.String,
   lastDeliveredSequence: Schema.BigInt

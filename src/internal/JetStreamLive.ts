@@ -19,6 +19,7 @@ import {
   StreamConfigConflict,
   StreamNotFound,
   SubjectNotBound,
+  validateConsumeBuffer,
   WrongLastSequence
 } from "./JetStream.ts"
 
@@ -323,9 +324,13 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
       consume: (stream, options: ConsumeOptions) =>
         Stream.unwrap(
           Effect.gen(function*() {
+            yield* validateConsumeBuffer(options.buffer)
             const capacity = options.buffer.messages
             const start = options.start
-            if (start._tag === "FromSequence" && start.sequence > 9007199254740991n) {
+            if (
+              (start._tag === "FromSequence" || start._tag === "AfterSequence")
+              && start.sequence > 9007199254740991n
+            ) {
               return yield* new SequenceNotProvablyExact({
                 stream,
                 operation: "consume opt_start_seq",
@@ -341,16 +346,21 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 ack_policy: AckPolicy.None,
                 filter_subjects: [...options.filters],
                 inactive_threshold: 60_000_000_000,
-                ...(start._tag === "AllHistory" ? { deliver_policy: DeliverPolicy.All } : {}),
+                ...(start._tag === "AllHistory"
+                    || (start._tag === "AfterSequence" && start.sequence === 0n)
+                  ? { deliver_policy: DeliverPolicy.All }
+                  : {}),
                 ...(start._tag === "LastPerSubject"
                   ? { deliver_policy: DeliverPolicy.LastPerSubject }
                   : {}),
                 ...(start._tag === "NewOnly" ? { deliver_policy: DeliverPolicy.New } : {}),
                 ...(start._tag === "FromSequence"
+                    || (start._tag === "AfterSequence" && start.sequence !== 0n)
                   ? {
                     deliver_policy: DeliverPolicy.StartSequence,
-                    // lib option is number-typed; a start beyond 2^53 was
-                    // refused above rather than silently rounded (ADR-0004)
+                    // StartSequence is inclusive. AfterSequence deliberately
+                    // starts at the boundary and drops <= boundary below, so
+                    // no bigint `+ 1` conversion can overflow or round.
                     opt_start_seq: Number(start.sequence)
                   }
                   : {})
@@ -440,7 +450,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                     yield* Queue.failCause(queue, Cause.fail(entry.failure))
                     return
                   }
-                  yield* Queue.offer(queue, entry.success)
+                  const dropped = start._tag === "AfterSequence"
+                    && entry.success.message.sequence <= start.sequence
+                  if (!dropped) yield* Queue.offer(queue, entry.success)
                   if (!caughtUp && message.info.pending === 0) {
                     caughtUp = true
                     yield* Queue.offer(queue, caughtUpEvent)
@@ -466,6 +478,15 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               if (Result.isFailure(entry)) {
                 Queue.failCauseUnsafe(queue, Cause.fail(entry.failure))
                 stop()
+                return
+              }
+              const dropped = start._tag === "AfterSequence"
+                && entry.success.message.sequence <= start.sequence
+              if (dropped) {
+                if (!caughtUp && message.info.pending === 0) {
+                  caughtUp = true
+                  Queue.offerUnsafe(queue, { _tag: "CaughtUp" })
+                }
                 return
               }
               const admitted = Queue.sizeUnsafe(queue) < capacity

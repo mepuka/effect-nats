@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest"
-import { Deferred, Effect, Fiber, Option, Queue, Result, Schema, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Option, Queue, Result, Schema, Stream } from "effect"
 import * as Memory from "../src/internal/JetStreamMemory.ts"
 import { makeKv } from "../src/internal/Kv.ts"
 import type { KvBucket, KvWatchEvent } from "../src/internal/Kv.ts"
@@ -152,6 +152,40 @@ it.effect("watch rejects invalid selectors before touching the wire", () =>
     expect(failure._tag).toBe("KvInvalidFilter")
   }))
 
+it.effect("watch dies on conflicting inclusive and exclusive resume positions", () =>
+  Effect.gen(function*() {
+    const { memory, store } = yield* setup()
+    const exit = yield* store.watch({ fromRevision: 1n, afterRevision: 1n }).pipe(
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.exit
+    )
+    expect(Exit.hasDies(exit)).toBe(true)
+    const defect = Exit.findDefect(exit)
+    expect(Result.isSuccess(defect)).toBe(true)
+    if (Result.isSuccess(defect)) {
+      expect(defect.success).toMatchObject({ _tag: "ConflictingWatchResume" })
+    }
+    expect(yield* memory.subscriberCount("KV_config")).toBe(0)
+  }))
+
+it.effect("watch rejects a zero-sized buffer before subscribing", () =>
+  Effect.gen(function*() {
+    const { memory, store } = yield* setup()
+    const exit = yield* store.watch({ bufferMessages: 0 }).pipe(
+      Stream.take(1),
+      Stream.runDrain,
+      Effect.exit
+    )
+    expect(Exit.hasDies(exit)).toBe(true)
+    const defect = Exit.findDefect(exit)
+    expect(Result.isSuccess(defect)).toBe(true)
+    if (Result.isSuccess(defect)) {
+      expect(defect.success).toMatchObject({ _tag: "InvalidConsumeBuffer" })
+    }
+    expect(yield* memory.subscriberCount("KV_config")).toBe(0)
+  }))
+
 it.effect("keys lists live keys only and terminates", () =>
   Effect.gen(function*() {
     const { store } = yield* setup()
@@ -252,14 +286,18 @@ it.effect("a lagging watch terminates typed with the last observed revision (ADR
       ),
       { startImmediately: true }
     )
-    yield* store.put(key("k"), bytes("v1"))
+    yield* store.put(key("k1"), bytes("v1"))
     yield* Deferred.await(pulled) // revision 1 pulled; the buffer is empty
-    yield* store.put(key("k"), bytes("v2")) // buffered
-    yield* store.put(key("k"), bytes("v3")) // overflows
+    yield* store.put(key("k2"), bytes("v2")) // buffered
+    yield* store.put(key("k3"), bytes("v3")) // overflows
     yield* Deferred.succeed(gate, void 0)
     const failure = yield* Effect.flip(Fiber.join(fiber))
     expect(failure._tag).toBe("KvWatchLagged")
     if (failure._tag === "KvWatchLagged") {
       expect(failure.lastRevision).toBe(2n)
+      const resumed = yield* pump(store.watch({ afterRevision: failure.lastRevision }))
+      expect(entryText(yield* Queue.take(resumed.queue))).toBe("Put:k3")
+      expect(entryText(yield* Queue.take(resumed.queue))).toBe("CaughtUp")
+      yield* Fiber.interrupt(resumed.fiber)
     }
   }))

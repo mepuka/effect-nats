@@ -369,4 +369,115 @@ export const conformance = (label: string, withService: WithService, timeout = 2
         }
       })
   )
+
+  its(
+    "C14 — a lagged subscription resumes exclusively after its last delivered sequence",
+    (service) =>
+      Effect.gen(function*() {
+        yield* service.createStream(kvConfig("resume"))
+        const ready = yield* Deferred.make<void>()
+        const pulled = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const observed: Array<string> = []
+        const events = service.consume("KV_resume", {
+          filters: ["$KV.resume.>"],
+          start: { _tag: "AllHistory" },
+          buffer: { _tag: "TerminateOnLag", messages: 1 }
+        })
+        const fiber = yield* Effect.forkChild(
+          Stream.runForEach(events, (event) =>
+            event._tag === "CaughtUp"
+              ? Deferred.succeed(ready, void 0).pipe(Effect.asVoid)
+              : Effect.sync(() => observed.push(text(event.message))).pipe(
+                Effect.andThen(Deferred.succeed(pulled, void 0)),
+                Effect.andThen(Deferred.await(gate))
+              )),
+          { startImmediately: true }
+        )
+
+        yield* Deferred.await(ready)
+        yield* service.publish("KV_resume", "$KV.resume.k", utf8.encode("v1"))
+        yield* Deferred.await(pulled)
+        yield* service.publish("KV_resume", "$KV.resume.k", utf8.encode("v2"))
+        yield* service.publish("KV_resume", "$KV.resume.k", utf8.encode("v3"))
+        yield* service.publish("KV_resume", "$KV.resume.k", utf8.encode("v4"))
+        yield* Deferred.succeed(gate, void 0)
+
+        const failure = yield* Effect.flip(Fiber.join(fiber))
+        expect(failure._tag).toBe("ConsumerLagged")
+        if (failure._tag !== "ConsumerLagged") return
+        expect(observed).toEqual(["v1", "v2"])
+        expect(failure.lastDeliveredSequence).toBe(2n)
+
+        const resumed = yield* service
+          .consume("KV_resume", {
+            filters: ["$KV.resume.>"],
+            start: {
+              _tag: "AfterSequence",
+              sequence: failure.lastDeliveredSequence
+            },
+            buffer: roomy
+          })
+          .pipe(
+            Stream.takeWhile((event) => event._tag !== "CaughtUp"),
+            Stream.runCollect
+          )
+        expect(
+          Array.from(resumed, (event) => event._tag === "Entry" ? text(event.message) : event._tag)
+        ).toEqual(["v3", "v4"])
+      })
+  )
+
+  its(
+    "C15 — AfterSequence handles the head and zero without changing inclusive starts",
+    (service) =>
+      Effect.gen(function*() {
+        yield* service.createStream(kvConfig("after"))
+        yield* service.publish("KV_after", "$KV.after.k", utf8.encode("v1"))
+        yield* service.publish("KV_after", "$KV.after.k", utf8.encode("v2"))
+
+        const atHead = yield* pump(service.consume("KV_after", {
+          filters: ["$KV.after.>"],
+          start: { _tag: "AfterSequence", sequence: 2n },
+          buffer: roomy
+        }))
+        expect((yield* Queue.take(atHead.queue))._tag).toBe("CaughtUp")
+        yield* service.publish("KV_after", "$KV.after.k", utf8.encode("v3"))
+        const live = yield* Queue.take(atHead.queue)
+        expect(live._tag).toBe("Entry")
+        if (live._tag === "Entry") expect(text(live.message)).toBe("v3")
+        yield* Fiber.interrupt(atHead.fiber)
+
+        const afterZero = yield* service
+          .consume("KV_after", {
+            filters: ["$KV.after.>"],
+            start: { _tag: "AfterSequence", sequence: 0n },
+            buffer: roomy
+          })
+          .pipe(
+            Stream.takeWhile((event) => event._tag !== "CaughtUp"),
+            Stream.runCollect
+          )
+        expect(
+          Array.from(
+            afterZero,
+            (event) => event._tag === "Entry" ? text(event.message) : event._tag
+          )
+        ).toEqual(["v1", "v2", "v3"])
+
+        const fromOne = yield* service
+          .consume("KV_after", {
+            filters: ["$KV.after.>"],
+            start: { _tag: "FromSequence", sequence: 1n },
+            buffer: roomy
+          })
+          .pipe(
+            Stream.takeWhile((event) => event._tag !== "CaughtUp"),
+            Stream.runCollect
+          )
+        expect(
+          Array.from(fromOne, (event) => event._tag === "Entry" ? text(event.message) : event._tag)
+        ).toEqual(["v1", "v2", "v3"])
+      })
+  )
 }

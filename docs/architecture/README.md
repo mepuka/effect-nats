@@ -24,6 +24,7 @@ Accepted ADRs:
 - [ADR-0007: Connection lifecycle policy](adr-0007-connection-lifecycle-policy.md) — connect
   retry/drain supervision from the transport branch; composes with ADR-0001 (reconnect) and
   ADR-0002 (wrap seam); its deferred subscription-queue decision is discharged by ADR-0005
+- [ADR-0008: Consume resume and buffer semantics](adr-0008-consume-resume-and-buffer-semantics.md)
 
 Proposed ADRs (not accepted decisions):
 
