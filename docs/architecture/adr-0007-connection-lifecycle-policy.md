@@ -1,10 +1,10 @@
-# ADR-0002: Connection lifecycle policy
+# ADR-0007: Connection lifecycle policy
 
 Status: Accepted (2026-08-21)
 
 ## Context
 
-ADR-0001 chose to wrap the official client behind internal seams and deferred
+ADR-0002 (wrap the official client, accepted) chose to wrap the official client behind internal seams and deferred
 four externally observable choices. This ADR accepts the first coherent set:
 the supervised connect/retry policy and release-drain policy implemented in
 `src/internal/NatsTransport.ts`, `src/internal/OfficialConnect.ts`, and

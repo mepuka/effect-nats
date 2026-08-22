@@ -21,6 +21,9 @@ Accepted ADRs:
 - [ADR-0003: KV naming strictness](adr-0003-kv-naming-strictness.md)
 - [ADR-0004: Revision and sequence representation](adr-0004-revision-representation.md)
 - [ADR-0005: Configuration layers and buffer honesty](adr-0005-configuration-layers.md)
+- [ADR-0007: Connection lifecycle policy](adr-0007-connection-lifecycle-policy.md) — connect
+  retry/drain supervision from the transport branch; composes with ADR-0001 (reconnect) and
+  ADR-0002 (wrap seam); its deferred subscription-queue decision is discharged by ADR-0005
 
 Proposed ADRs (not accepted decisions):
 

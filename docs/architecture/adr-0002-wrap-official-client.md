@@ -30,6 +30,14 @@ Revisit triggers for the wire target: upstream governance/dependency policy conf
 measured performance ceiling attributable to the wrapper, or a protocol behavior the public
 packages cannot express.
 
+## Implementation seam
+
+The transport slice realizes this decision as an internal structural `Connection` seam
+([src/internal/NatsTransport.ts](../../src/internal/NatsTransport.ts)) naming the exact subset of
+the official surface this client depends on; official packages are acquired inside a Layer scope
+and official types never leak above the seam. (Absorbed from the transport branch's proposed
+wrap ADR, which this accepted ADR supersedes.) Connect/drain supervision details are ADR-0007.
+
 ## Consequences
 
 Workbench decision items 1 and 5 are discharged for the first implementation pass; the
