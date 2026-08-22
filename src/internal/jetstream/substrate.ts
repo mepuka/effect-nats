@@ -39,11 +39,22 @@ export interface PublishOptions {
   readonly headers?: ReadonlyMap<string, string>
 }
 
+/**
+ * Per-subscription buffer policy (ADR-0005). `PullWindow` is legal only where
+ * production is genuinely controllable upstream (a pull window or an in-process
+ * producer): a full buffer suspends the producer. `TerminateOnLag` is for
+ * producers that cannot be suspended: a full buffer terminates the subscription
+ * with a typed `ConsumerLagged` carrying the last delivered sequence, so the
+ * consumer can resume from a known position. Silent loss is not offered.
+ */
+export type ConsumeBuffer =
+  | { readonly _tag: "PullWindow"; readonly messages: number }
+  | { readonly _tag: "TerminateOnLag"; readonly messages: number }
+
 export interface ConsumeOptions {
   readonly filters: ReadonlyArray<string>
   readonly start: StartPosition
-  /** Bound of the per-subscription buffer; a full buffer suspends publishers. */
-  readonly bufferCapacity?: number
+  readonly buffer: ConsumeBuffer
 }
 
 /** `Nats-Rollup: sub` on a publish replaces all prior messages for its subject. */
@@ -87,6 +98,12 @@ export class RollupNotPermitted
   })
 {}
 
+/** A TerminateOnLag subscription overflowed; resume from `lastDeliveredSequence`. */
+export class ConsumerLagged extends Schema.TaggedError<ConsumerLagged>()("ConsumerLagged", {
+  stream: Schema.String,
+  lastDeliveredSequence: Schema.BigInt
+}) {}
+
 export class JetStreamSubstrate extends Context.Service<JetStreamSubstrate, {
   /** Create-only; an existing stream with identical config succeeds (idempotent). */
   createStream(config: StreamConfig): Effect.Effect<void, StreamConfigConflict>
@@ -108,8 +125,11 @@ export class JetStreamSubstrate extends Context.Service<JetStreamSubstrate, {
   ): Effect.Effect<StoredMessage, StreamNotFound | NoMessageForSubject>
   /**
    * Scoped ordered consumption: replays per `start`, emits one `CaughtUp`, then
-   * continues live. Per-subscription ordering is preserved; the buffer is
-   * bounded and a full buffer suspends publishers (no silent loss).
+   * continues live. Per-subscription ordering is preserved; overflow behavior
+   * follows the declared `buffer` policy — never silent loss.
    */
-  consume(stream: string, options: ConsumeOptions): Stream.Stream<ConsumeEvent, StreamNotFound>
+  consume(
+    stream: string,
+    options: ConsumeOptions
+  ): Stream.Stream<ConsumeEvent, StreamNotFound | ConsumerLagged>
 }>()("effect-nats/internal/jetstream/JetStreamSubstrate") {}

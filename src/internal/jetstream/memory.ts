@@ -8,6 +8,7 @@ import type {
   StreamConfig
 } from "./substrate.ts"
 import {
+  ConsumerLagged,
   JetStreamSubstrate,
   NoMessageForSubject,
   rollupHeader,
@@ -18,10 +19,13 @@ import {
   SubjectNotBound,
   WrongLastSequence
 } from "./substrate.ts"
+import type { ConsumeBuffer } from "./substrate.ts"
 
 interface Subscriber {
-  readonly queue: Queue.Queue<StoredMessage, StreamNotFound>
+  readonly queue: Queue.Queue<StoredMessage, StreamNotFound | ConsumerLagged>
   readonly filters: ReadonlyArray<string>
+  readonly buffer: ConsumeBuffer
+  lastDelivered: bigint
 }
 
 interface StreamState {
@@ -166,11 +170,30 @@ export const make: Effect.Effect<MemorySubstrate> = Effect.gen(function*() {
               state.messages = state.messages.filter((m) => !drop.has(m))
             }
           }
-          // Bounded fan-out inside the permit: a full subscriber buffer suspends
-          // this publish rather than dropping (the stated overflow contract).
+          // Bounded fan-out inside the permit, per each subscriber's declared
+          // policy (ADR-0005): PullWindow suspends this publish; TerminateOnLag
+          // fails the lagging subscription and spares the publisher.
           yield* Effect.forEach(
             [...state.subscribers].filter((s) => matchesAny(s.filters, subject)),
-            (subscriber) => Queue.offer(subscriber.queue, message),
+            (subscriber) =>
+              Effect.gen(function*() {
+                if (subscriber.buffer._tag === "TerminateOnLag") {
+                  const size = yield* Queue.size(subscriber.queue)
+                  if (size >= subscriber.buffer.messages) {
+                    state.subscribers.delete(subscriber)
+                    yield* Queue.fail(
+                      subscriber.queue,
+                      new ConsumerLagged({
+                        stream,
+                        lastDeliveredSequence: subscriber.lastDelivered
+                      })
+                    )
+                    return
+                  }
+                }
+                yield* Queue.offer(subscriber.queue, message)
+                subscriber.lastDelivered = message.sequence
+              }),
             { discard: true }
           )
           return message.sequence
@@ -195,10 +218,18 @@ export const make: Effect.Effect<MemorySubstrate> = Effect.gen(function*() {
           Effect.gen(function*() {
             const state = yield* requireStream(stream)
             const queue = yield* Effect.acquireRelease(
-              Queue.bounded<StoredMessage, StreamNotFound>(options.bufferCapacity ?? 4096),
+              Queue.bounded<StoredMessage, StreamNotFound | ConsumerLagged>(
+                options.buffer.messages
+              ),
               (q) => Queue.shutdown(q)
             )
-            const subscriber: Subscriber = { queue, filters: options.filters }
+            const subscriber: Subscriber = {
+              queue,
+              filters: options.filters,
+              buffer: options.buffer,
+              // resume point before any live delivery: the head at registration
+              lastDelivered: state.nextSequence - 1n
+            }
             // Registration before snapshot selection, both under the permit:
             // no message can land between snapshot and live (case C1).
             yield* Effect.acquireRelease(

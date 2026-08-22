@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest"
-import { Effect, Fiber, Option, Queue, Result, Schema, Stream } from "effect"
+import { Deferred, Effect, Fiber, Option, Queue, Result, Schema, Stream } from "effect"
 import * as Memory from "../src/internal/jetstream/memory.ts"
 import { makeKv } from "../src/internal/kv/kv.ts"
 import type { KvBucket, KvWatchEvent } from "../src/internal/kv/kv.ts"
@@ -233,4 +233,33 @@ it.effect("watch subscriptions release on interruption", () =>
     yield* Fiber.interrupt(a.fiber)
     yield* Fiber.interrupt(b.fiber)
     expect(yield* memory.subscriberCount("KV_config")).toBe(0)
+  }))
+
+it.effect("a lagging watch terminates typed with the last observed revision (ADR-0005)", () =>
+  Effect.gen(function*() {
+    const { store } = yield* setup()
+    // same deterministic protocol as the substrate lag test: one entry in
+    // flight, one buffered, the next overflows the capacity-1 buffer
+    const pulled = yield* Deferred.make<void>()
+    const gate = yield* Deferred.make<void>()
+    const fiber = yield* Effect.forkChild(
+      Stream.runForEach(
+        store.watch({ updatesOnly: true, bufferMessages: 1 }),
+        (event) =>
+          event._tag === "CaughtUp"
+            ? Effect.void
+            : Deferred.succeed(pulled, void 0).pipe(Effect.andThen(Deferred.await(gate)))
+      ),
+      { startImmediately: true }
+    )
+    yield* store.put(key("k"), bytes("v1"))
+    yield* Deferred.await(pulled) // revision 1 pulled; the buffer is empty
+    yield* store.put(key("k"), bytes("v2")) // buffered
+    yield* store.put(key("k"), bytes("v3")) // overflows
+    yield* Deferred.succeed(gate, void 0)
+    const failure = yield* Effect.flip(Fiber.join(fiber))
+    expect(failure._tag).toBe("KvWatchLagged")
+    if (failure._tag === "KvWatchLagged") {
+      expect(failure.lastRevision).toBe(2n)
+    }
   }))

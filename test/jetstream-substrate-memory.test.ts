@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest"
-import { Effect, Fiber, Queue, Stream } from "effect"
+import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
 import * as Memory from "../src/internal/jetstream/memory.ts"
 import type { ConsumeEvent, StoredMessage } from "../src/internal/jetstream/substrate.ts"
 
@@ -14,6 +14,9 @@ const kvConfig = (bucket: string) => ({
 })
 
 const text = (message: StoredMessage): string => decoder.decode(message.payload)
+
+// ADR-0005: consumption declares its buffer policy explicitly.
+const pull = { _tag: "PullWindow", messages: 64 } as const
 
 // Pumps a consume stream into a queue so tests can await events one at a time
 // without sleeps: taking the CaughtUp event proves registration completed.
@@ -104,9 +107,10 @@ it.effect("prunes history beyond maxMessagesPerSubject, oldest first", () =>
     yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v2"))
     yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v3"))
     const events = yield* Stream.runCollect(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" } }).pipe(
-        Stream.takeWhile((event) => event._tag !== "CaughtUp")
-      )
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" }, buffer: pull })
+        .pipe(
+          Stream.takeWhile((event) => event._tag !== "CaughtUp")
+        )
     )
     const values = events.map((event) => event._tag === "Entry" ? text(event.message) : "?")
     expect(values).toEqual(["v2", "v3"])
@@ -122,9 +126,10 @@ it.effect("rollup removes prior messages for that subject only", () =>
       headers: new Map([["Nats-Rollup", "sub"]])
     })
     const events = yield* Stream.runCollect(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" } }).pipe(
-        Stream.takeWhile((event) => event._tag !== "CaughtUp")
-      )
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" }, buffer: pull })
+        .pipe(
+          Stream.takeWhile((event) => event._tag !== "CaughtUp")
+        )
     )
     const values = events.map((event) => event._tag === "Entry" ? text(event.message) : "?")
     expect(values).toEqual(["keep", "purged"])
@@ -149,7 +154,7 @@ it.effect("consume replays history, marks CaughtUp, then continues live", () =>
     yield* service.publish("KV_b", "$KV.b.a", utf8.encode("e1"))
     yield* service.publish("KV_b", "$KV.b.b", utf8.encode("e2"))
     const { fiber, queue } = yield* pump(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" } })
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "AllHistory" }, buffer: pull })
     )
     const replay1 = yield* Queue.take(queue)
     const replay2 = yield* Queue.take(queue)
@@ -173,7 +178,11 @@ it.effect("consume start positions: LastPerSubject, NewOnly, FromSequence", () =
     yield* service.publish("KV_b", "$KV.b.k2", utf8.encode("k2"))
 
     const lastPer = yield* Stream.runCollect(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "LastPerSubject" } }).pipe(
+      service.consume("KV_b", {
+        filters: ["$KV.b.>"],
+        start: { _tag: "LastPerSubject" },
+        buffer: pull
+      }).pipe(
         Stream.takeWhile((event) => event._tag !== "CaughtUp")
       )
     )
@@ -182,13 +191,14 @@ it.effect("consume start positions: LastPerSubject, NewOnly, FromSequence", () =
     const fromSeq = yield* Stream.runCollect(
       service.consume("KV_b", {
         filters: ["$KV.b.>"],
-        start: { _tag: "FromSequence", sequence: 2n }
+        start: { _tag: "FromSequence", sequence: 2n },
+        buffer: pull
       }).pipe(Stream.takeWhile((event) => event._tag !== "CaughtUp"))
     )
     expect(fromSeq.map((e) => e._tag === "Entry" ? text(e.message) : "?")).toEqual(["k1-new", "k2"])
 
     const { fiber, queue } = yield* pump(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" } })
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" }, buffer: pull })
     )
     const marker = yield* Queue.take(queue)
     expect(marker._tag).toBe("CaughtUp")
@@ -205,7 +215,11 @@ it.effect("consume filters restrict delivery per subscription", () =>
     yield* service.publish("KV_b", "$KV.b.auth.user", utf8.encode("in"))
     yield* service.publish("KV_b", "$KV.b.other", utf8.encode("out"))
     const events = yield* Stream.runCollect(
-      service.consume("KV_b", { filters: ["$KV.b.auth.>"], start: { _tag: "AllHistory" } }).pipe(
+      service.consume("KV_b", {
+        filters: ["$KV.b.auth.>"],
+        start: { _tag: "AllHistory" },
+        buffer: pull
+      }).pipe(
         Stream.takeWhile((event) => event._tag !== "CaughtUp")
       )
     )
@@ -217,7 +231,7 @@ it.effect("deleting a stream fails active consumers with StreamNotFound", () =>
     const { service } = yield* Memory.make
     yield* service.createStream(kvConfig("b"))
     const { fiber, queue } = yield* pump(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" } })
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" }, buffer: pull })
     )
     const marker = yield* Queue.take(queue)
     expect(marker._tag).toBe("CaughtUp")
@@ -235,10 +249,10 @@ it.effect("subscriber accounting returns to baseline after completion and interr
     yield* service.createStream(kvConfig("b"))
     expect(yield* memory.subscriberCount("KV_b")).toBe(0)
     const a = yield* pump(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" } })
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" }, buffer: pull })
     )
     const b = yield* pump(
-      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" } })
+      service.consume("KV_b", { filters: ["$KV.b.>"], start: { _tag: "NewOnly" }, buffer: pull })
     )
     expect((yield* Queue.take(a.queue))._tag).toBe("CaughtUp")
     expect((yield* Queue.take(b.queue))._tag).toBe("CaughtUp")
@@ -250,7 +264,7 @@ it.effect("subscriber accounting returns to baseline after completion and interr
     expect(yield* memory.subscriberCount("KV_b")).toBe(0)
   }))
 
-it.effect("bounded consumer buffers deliver everything in order without loss", () =>
+it.effect("a PullWindow buffer suspends production and delivers in order without loss", () =>
   Effect.gen(function*() {
     const { service } = yield* Memory.make
     yield* service.createStream(kvConfig("b"))
@@ -258,7 +272,7 @@ it.effect("bounded consumer buffers deliver everything in order without loss", (
       service.consume("KV_b", {
         filters: ["$KV.b.>"],
         start: { _tag: "NewOnly" },
-        bufferCapacity: 1
+        buffer: { _tag: "PullWindow", messages: 1 }
       })
     )
     expect((yield* Queue.take(queue))._tag).toBe("CaughtUp")
@@ -278,4 +292,42 @@ it.effect("bounded consumer buffers deliver everything in order without loss", (
     yield* Fiber.join(publisher)
     expect(seen).toEqual(["v1", "v2", "v3", "v4", "v5"])
     yield* Fiber.interrupt(fiber)
+  }))
+
+it.effect("a TerminateOnLag buffer fails the lagging subscription typed, sparing the publisher", () =>
+  Effect.gen(function*() {
+    const memory = yield* Memory.make
+    const { service } = memory
+    yield* service.createStream(kvConfig("b"))
+    // Deterministic protocol: the consumer signals `pulled` on each live entry
+    // and then waits on `gate`, so exactly one entry is in flight while the
+    // capacity-1 buffer holds the next and the one after overflows.
+    const pulled = yield* Deferred.make<void>()
+    const gate = yield* Deferred.make<void>()
+    const events = service.consume("KV_b", {
+      filters: ["$KV.b.>"],
+      start: { _tag: "NewOnly" },
+      buffer: { _tag: "TerminateOnLag", messages: 1 }
+    })
+    const fiber = yield* Effect.forkChild(
+      Stream.runForEach(events, (event) =>
+        event._tag === "CaughtUp"
+          ? Effect.void
+          : Deferred.succeed(pulled, void 0).pipe(Effect.andThen(Deferred.await(gate)))),
+      { startImmediately: true }
+    )
+    yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v1"))
+    yield* Deferred.await(pulled) // seq 1 pulled; the buffer is empty again
+    yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v2")) // buffered
+    yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v3")) // overflows
+    // the publisher is unaffected by the lagged subscriber's failure
+    const publisherStillFine = yield* service.publish("KV_b", "$KV.b.k", utf8.encode("v4"))
+    expect(publisherStillFine).toBe(4n)
+    expect(yield* memory.subscriberCount("KV_b")).toBe(0)
+    yield* Deferred.succeed(gate, void 0)
+    const failure = yield* Effect.flip(Fiber.join(fiber))
+    expect(failure._tag).toBe("ConsumerLagged")
+    if (failure._tag === "ConsumerLagged") {
+      expect(failure.lastDeliveredSequence).toBe(2n)
+    }
   }))
