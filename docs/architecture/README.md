@@ -13,3 +13,12 @@ Public API work begins after the first decision pass records:
 
 The initial package exports nothing. Research notes under `../research/` inform the decision pass;
 accepted decisions become numbered ADRs here before they constrain the implementation.
+
+Accepted ADRs:
+
+- [ADR-0001: Reconnect limits and policy](adr-0001-reconnect-limits.md)
+- [ADR-0002: Wrap the official client first](adr-0002-wrap-official-client.md)
+- [ADR-0003: KV naming strictness](adr-0003-kv-naming-strictness.md)
+- [ADR-0004: Revision and sequence representation](adr-0004-revision-representation.md)
+
+Draft workbench material (not decisions): [kv-slice-scoping.md](kv-slice-scoping.md)
