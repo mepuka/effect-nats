@@ -1,0 +1,24 @@
+{
+  "name": "effect-nats",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "oxlint src test vitest.config.ts",
+    "format": "dprint fmt",
+    "format:check": "dprint check"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.111"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.36.5",
+    "@effect/vitest": "4.0.0-rc.111",
+    "dprint": "0.56.1",
+    "oxlint": "1.79.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

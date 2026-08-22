@@ -1,0 +1,48 @@
+# NATS Effect — repository rules
+
+This repository develops an Effect v4-native TypeScript client for NATS Core and the JetStream
+primitives required by Key/Value and Object Store. The public contract is under design; the current
+root export stays empty until an ADR approves the first API surface.
+
+## Read before changing
+
+- **Effect code, services, streams, errors, retries, config, or tests:** read `docs/STYLE.md`.
+- **Protocol, compatibility, Core, KV, or Object Store behavior:** read
+  `docs/research/nats-js-reference.md` and the applicable ADR under `docs/architecture/`.
+- **Third-party precedent:** read `docs/research/ecosystem-survey.md`; treat it as comparison
+  evidence, never protocol authority.
+- **Effect architecture rationale:** read `docs/research/effect-native-client-architecture.md`.
+
+## Laws
+
+1. **Design gate.** A new public export, service method, error variant, encoded type, compatibility
+   promise, or runtime promise requires an accepted ADR. Experiments remain internal.
+2. **Source precedence.** Pinned NATS protocol/server and official client source > conformance and
+   integration observations > official docs > third-party projects. Record disagreements.
+3. **Scope owns lifetime.** Connections, readers, writers, subscriptions, requests, reconnect
+   loops, heartbeats, and drains acquire and finalize within `Scope`. Layers finish acquisition;
+   their long-lived fibers use scoped forks.
+4. **Backpressure is explicit.** Every producer/consumer boundary names its capacity and overflow
+   behavior. Public subscriptions expose pull-based `Stream`; private callbacks bridge through a
+   bounded `Queue`, `PubSub`, or `SubscriptionRef` chosen for the delivery contract.
+5. **Typed boundaries.** Decode untrusted wire/config/storage values, preserve protocol status and
+   headers, and translate transport defects into operation-labeled typed errors without swallowing
+   interruption.
+6. **Truthful retry.** Use `Schedule` only at the narrowest idempotent boundary. Publish, request,
+   reconnect, KV mutation, and object transfer each document their distinct retry consequences.
+7. **Layered tests.** Pure protocol tests use bytes and deterministic state machines; Effect tests
+   use fakes and test services; server integration tests run separately against declared NATS
+   versions. Time and concurrency tests use `TestClock`, `Deferred`, `Queue`, or `Latch`.
+8. **No accidental endorsement.** The repository may target upstream quality, but documentation
+   states its actual governance and release status until it is accepted by the NATS project.
+
+## Change workflow
+
+1. State the protocol or API contract and its evidence.
+2. Add a failing unit, type, conformance, or integration test at the narrowest layer.
+3. Implement through internal modules; export only ADR-approved surface.
+4. Run `pnpm format:check`, `pnpm lint`, `pnpm check`, and `pnpm test`.
+5. Report which claims are tested locally, tested against a server, assumed, or still undecided.
+
+A change is complete when all four checks pass, public-surface changes cite an ADR, lifecycle and
+backpressure behavior are test-covered, and no unrelated working-tree changes are included.

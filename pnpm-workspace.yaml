@@ -1,0 +1,20 @@
+allowBuilds:
+  dprint: true
+  msgpackr-extract: false
+minimumReleaseAgeExclude:
+  - '@dprint/android-arm64@0.56.1'
+  - '@dprint/android-x64@0.56.1'
+  - '@dprint/darwin-arm64@0.56.1'
+  - '@dprint/darwin-x64@0.56.1'
+  - '@dprint/linux-arm64-glibc@0.56.1'
+  - '@dprint/linux-arm64-musl@0.56.1'
+  - '@dprint/linux-loong64-glibc@0.56.1'
+  - '@dprint/linux-loong64-musl@0.56.1'
+  - '@dprint/linux-ppc64-glibc@0.56.1'
+  - '@dprint/linux-ppc64-musl@0.56.1'
+  - '@dprint/linux-riscv64-glibc@0.56.1'
+  - '@dprint/linux-x64-glibc@0.56.1'
+  - '@dprint/linux-x64-musl@0.56.1'
+  - '@dprint/win32-arm64@0.56.1'
+  - '@dprint/win32-x64@0.56.1'
+  - dprint@0.56.1
