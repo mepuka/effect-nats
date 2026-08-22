@@ -4,13 +4,15 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "node scripts/check.mjs",
     "test": "vitest run",
     "lint": "oxlint src test vitest.config.ts",
     "format": "dprint fmt",
     "format:check": "dprint check"
   },
   "dependencies": {
+    "@nats-io/nats-core": "^3.4.0",
+    "@nats-io/transport-node": "^3.4.0",
     "effect": "4.0.0-rc.111"
   },
   "devDependencies": {
