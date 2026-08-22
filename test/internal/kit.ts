@@ -1,11 +1,11 @@
 /**
- * Test interpreters at the OfficialConnection seam: an in-memory fake of the
+ * Test interpreters at the Connection seam: an in-memory fake of the
  * official client boundary with explicit behavior controls and observation
  * surfaces. No servers, no wall time.
  */
 import { Clock, Effect, Layer, Queue } from "effect"
 import type { ConnectIssue } from "../../src/internal/Errors.ts"
-import type { OfficialConnection, OfficialStatus } from "../../src/internal/NatsTransport.ts"
+import type { Connection, OfficialStatus } from "../../src/internal/NatsTransport.ts"
 import type { Interface as OfficialConnectInterface } from "../../src/internal/OfficialConnect.ts"
 import { OfficialConnect } from "../../src/internal/OfficialConnect.ts"
 
@@ -19,7 +19,7 @@ export interface FakeOfficialObserved {
 export type StubMode = "ok" | "hang" | "fail"
 
 export interface FakeOfficial {
-  readonly connection: OfficialConnection
+  readonly connection: Connection
   /** Interaction log and leak detectors asserted by tests. */
   readonly observed: FakeOfficialObserved
   /** Behavior controls for the next invocation of each boundary call. */
@@ -57,7 +57,7 @@ export const makeFakeOfficial = (): Effect.Effect<FakeOfficial> =>
         ? new Promise(() => {})
         : Promise.resolve()
 
-    const connection: OfficialConnection = {
+    const connection: Connection = {
       closed: () => Promise.resolve(undefined),
       close: () => {
         observed.closeCalls++

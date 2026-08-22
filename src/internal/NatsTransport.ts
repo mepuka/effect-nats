@@ -13,7 +13,7 @@ export interface OfficialStatus {
   readonly data?: unknown
 }
 
-export interface OfficialConnection {
+export interface Connection {
   readonly closed: () => Promise<void | Error>
   readonly close: () => Promise<void>
   readonly drain: () => Promise<void>
@@ -40,14 +40,14 @@ export class NatsTransport extends Context.Service<NatsTransport, Interface>()(
  * optional `drainTimeout`. The underlying official drain promise cannot be
  * cancelled, so a timeout abandons (not cancels) it.
  */
-export const layerFromOfficial = (
-  connection: OfficialConnection,
+export const layerTransport= (
+  connection: Connection,
   options?: {
     readonly drainTimeout?: Duration.Input | undefined
   }
 ) => Layer.effect(NatsTransport, transportFromOfficial(connection, options?.drainTimeout))
 
-const transportFromOfficial = (connection: OfficialConnection, drainTimeout?: Duration.Input) =>
+const transportFromOfficial = (connection: Connection, drainTimeout?: Duration.Input) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       let released = false

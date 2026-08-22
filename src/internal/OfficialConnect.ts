@@ -1,7 +1,7 @@
 import { Context } from "effect"
 import type { Effect } from "effect"
 import type { ConnectIssue } from "./Errors.ts"
-import type { OfficialConnection } from "./NatsTransport.ts"
+import type { Connection } from "./NatsTransport.ts"
 
 /** Options handed to the official client's connect entry point. */
 export interface OfficialConnectOptions {
@@ -16,7 +16,7 @@ export interface Interface {
    */
   readonly connect: (
     options: OfficialConnectOptions
-  ) => Effect.Effect<OfficialConnection, ConnectIssue>
+  ) => Effect.Effect<Connection, ConnectIssue>
 }
 
 /**
