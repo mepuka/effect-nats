@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Fiber, Queue, Scope, Stream } from "effect"
 import { make as makeStatusBridge } from "../../src/internal/StatusBridge.ts"
-import { makeFakeOfficial, statusOf } from "./kit.ts"
+import { makeFakeConnection, statusOf } from "./kit.ts"
 
-it.effect("delivers statuses until the official feed ends, then completes", () =>
+it.effect("delivers statuses until the server ends the feed, then completes", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const collected = yield* Effect.scoped(
       makeStatusBridge({ connection: fake.connection, capacity: 8 }).pipe(
         Effect.flatMap(({ events }) =>
@@ -26,7 +26,7 @@ it.effect("delivers statuses until the official feed ends, then completes", () =
 
 it.effect("scope release during a parked pull settles the iterator exactly once", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const scope = yield* Scope.make()
     const program = makeStatusBridge({ connection: fake.connection, capacity: 8 }).pipe(
       Effect.flatMap(({ events }) => Stream.runDrain(events))
@@ -44,7 +44,7 @@ it.effect("scope release during a parked pull settles the iterator exactly once"
 
 it.effect("overflow terminates with a shared SlowConsumerError", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const outcome = yield* Effect.scoped(
       makeStatusBridge({ connection: fake.connection, capacity: 1 }).pipe(
         Effect.flatMap(({ events }) =>

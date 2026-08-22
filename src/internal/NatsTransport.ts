@@ -1,14 +1,14 @@
 import { Context, Effect, Layer, Schedule } from "effect"
 import type { Duration } from "effect"
+import { Connector } from "./Connector.ts"
 import { ConnectExhaustedError, ConnectionClosedError } from "./Errors.ts"
-import { OfficialConnect } from "./OfficialConnect.ts"
 
 /**
  * Structural subset of the official `@nats-io` public client surface that this
  * seam adapts. Keeping the shape structural keeps the transport boundary
  * adapter-neutral and fakeable; only lifecycle members are consumed so far.
  */
-export interface OfficialStatus {
+export interface ServerStatus {
   readonly type: string
   readonly data?: unknown
 }
@@ -20,7 +20,7 @@ export interface Connection {
   readonly flush: () => Promise<void>
   readonly isClosed: () => boolean
   readonly isDraining: () => boolean
-  readonly status: () => AsyncIterable<OfficialStatus>
+  readonly status: () => AsyncIterable<ServerStatus>
 }
 
 export interface Interface {
@@ -33,11 +33,11 @@ export class NatsTransport extends Context.Service<NatsTransport, Interface>()(
 ) {}
 
 /**
- * Builds the transport over an already-parameterized official connection.
+ * Builds the transport over an already-parameterized connection.
  *
  * Release is idempotent and ordered: one bounded drain attempt, then close —
  * the forced-close fallback runs even when the drain fails or exceeds the
- * optional `drainTimeout`. The underlying official drain promise cannot be
+ * optional `drainTimeout`. The underlying drain promise cannot be
  * cancelled, so a timeout abandons (not cancels) it.
  */
 export const layerTransport = (
@@ -45,9 +45,9 @@ export const layerTransport = (
   options?: {
     readonly drainTimeout?: Duration.Input | undefined
   }
-) => Layer.effect(NatsTransport, transportFromOfficial(connection, options?.drainTimeout))
+) => Layer.effect(NatsTransport, transportFromConnection(connection, options?.drainTimeout))
 
-const transportFromOfficial = (connection: Connection, drainTimeout?: Duration.Input) =>
+const transportFromConnection = (connection: Connection, drainTimeout?: Duration.Input) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       let released = false
@@ -102,14 +102,14 @@ const defaultConnectSchedule = Schedule.exponential("200 millis").pipe(
 )
 
 /**
- * Builds the transport by acquiring an official connection through the
- * `OfficialConnect` seam under a supervised retry policy.
+ * Builds the transport by acquiring a connection through the
+ * `Connector` seam under a supervised retry policy.
  *
  * Only transient issues are retried, on the given bounded schedule (bounded,
  * jittered default); fatal issues fall through immediately and unretried.
  * Schedule exhaustion surfaces once as `ConnectExhaustedError` carrying the
  * attempt count and last transient issue. Release matches
- * `layerFromOfficial`.
+ * `layerTransport`.
  */
 export const layerConnecting = (options: {
   readonly servers: ReadonlyArray<string>
@@ -118,13 +118,13 @@ export const layerConnecting = (options: {
   Layer.effect(
     NatsTransport,
     Effect.gen(function*() {
-      const official = yield* OfficialConnect
+      const connector = yield* Connector
       let attempts = 0
       const connection = yield* Effect.suspend(() => {
         // Re-evaluated once per retry, so the count equals every invocation
         // the schedule drives - including the final one that exhausts it.
         attempts++
-        return official.connect({ servers: options.servers })
+        return connector.connect({ servers: options.servers })
       }).pipe(
         Effect.retry({
           schedule: options.schedule ?? defaultConnectSchedule,
@@ -144,6 +144,6 @@ export const layerConnecting = (options: {
           })
         )
       )
-      return yield* transportFromOfficial(connection)
+      return yield* transportFromConnection(connection)
     })
   )

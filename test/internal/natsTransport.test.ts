@@ -2,11 +2,11 @@ import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { layerTransport, NatsTransport } from "../../src/internal/NatsTransport.ts"
-import { makeFakeOfficial } from "./kit.ts"
+import { makeFakeConnection } from "./kit.ts"
 
 it.effect("flush round-trips while the layer is open", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use((transport) => transport.flush()).pipe(Effect.provide(layer))
@@ -16,7 +16,7 @@ it.effect("flush round-trips while the layer is open", () =>
 
 it.effect("closing the layer drains and closes the underlying connection once", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use(() => Effect.void).pipe(Effect.provide(layer))
@@ -27,7 +27,7 @@ it.effect("closing the layer drains and closes the underlying connection once", 
 
 it.effect("flush fails with ConnectionClosedError once the connection is closed", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use((transport) =>
@@ -43,7 +43,7 @@ it.effect("flush fails with ConnectionClosedError once the connection is closed"
 
 it.effect("a hanging drain is abandoned at the deadline and close still runs", () =>
   Effect.gen(function*() {
-    const fake = yield* makeFakeOfficial()
+    const fake = yield* makeFakeConnection()
     fake.controls.drain = "hang"
     const scope = yield* Scope.make()
     yield* Layer.build(layerTransport(fake.connection, { drainTimeout: "5 seconds" })).pipe(

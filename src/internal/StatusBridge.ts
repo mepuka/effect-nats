@@ -1,26 +1,26 @@
 import { Effect, Stream } from "effect"
 import type { Scope } from "effect"
 import { ConnectionClosedError, SlowConsumerError } from "./Errors.ts"
-import type { Connection, OfficialStatus } from "./NatsTransport.ts"
+import type { Connection, ServerStatus } from "./NatsTransport.ts"
 import { make as makeSubscriptionBridge } from "./SubscriptionBridge.ts"
 
 export interface Interface {
   /**
-   * Status events while open. Completes when the official feed ends; fails
+   * Status events while open. Completes when the server feed ends; fails
    * with `SlowConsumerError` if the bridge overflows.
    */
-  readonly events: Stream.Stream<OfficialStatus, SlowConsumerError>
+  readonly events: Stream.Stream<ServerStatus, SlowConsumerError>
 }
 
 /**
- * Bridges the official status feed into a bounded pull-based stream.
+ * Bridges the server status feed into a bounded pull-based stream.
  *
- * One scoped fiber pulls the official iterator and admits into the
+ * One scoped fiber pulls the connection's status iterator and admits into the
  * `SubscriptionBridge` queue without suspending; overflow terminates exactly
  * as the subscription contract does. Release order satisfies the rule-11
  * proof obligations: the interrupt canceler settles `iterator.return()` once,
  * before any queue shutdown can matter, and a released pump never offers
- * again. The real official status iterator is the same queued-iterator shape
+ * again. The real status iterator is the same queued-iterator shape
  * pinned by the evidence tests, whose parked pulls only settle via `stop()`
  * - which is why interruption abandons (never awaits) an in-flight pull.
  */
@@ -29,7 +29,7 @@ export const make = ({ connection, capacity }: {
   readonly capacity: number
 }): Effect.Effect<Interface, never, Scope.Scope> =>
   Effect.gen(function*() {
-    const bridge = yield* makeSubscriptionBridge<OfficialStatus>({
+    const bridge = yield* makeSubscriptionBridge<ServerStatus>({
       operation: "NatsTransport.status",
       subject: "status",
       capacity
@@ -39,8 +39,8 @@ export const make = ({ connection, capacity }: {
 
     const makePull = () => {
       const iter = connection.status()[Symbol.asyncIterator]()
-      return (): Effect.Effect<IteratorResult<OfficialStatus>, ConnectionClosedError> =>
-        Effect.callback<IteratorResult<OfficialStatus>, ConnectionClosedError>((resume) => {
+      return (): Effect.Effect<IteratorResult<ServerStatus>, ConnectionClosedError> =>
+        Effect.callback<IteratorResult<ServerStatus>, ConnectionClosedError>((resume) => {
           let settled = false
           iter.next().then(
             (result) => {

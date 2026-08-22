@@ -11,7 +11,7 @@ import { QueuedIteratorImpl } from "@nats-io/nats-core/internal"
 import { Effect, Fiber, Stream } from "effect"
 import { TestClock } from "effect/testing"
 
-it("official QueuedIteratorImpl: return() cannot settle a parked pull until stop()", async () => {
+it("nats.js QueuedIteratorImpl: return() cannot settle a parked pull until stop()", async () => {
   const qi = new QueuedIteratorImpl<unknown>()
   const gen = qi[Symbol.asyncIterator]()
   const pull = gen.next()
@@ -30,7 +30,7 @@ it("official QueuedIteratorImpl: return() cannot settle a parked pull until stop
   expect(await ret).toEqual({ value: undefined, done: true })
 })
 
-it("official QueuedIteratorImpl: upstream buffering is unbounded", async () => {
+it("nats.js QueuedIteratorImpl: upstream buffering is unbounded", async () => {
   const qi = new QueuedIteratorImpl<number>()
   for (let i = 0; i < 10_000; i++) {
     qi.push(i)

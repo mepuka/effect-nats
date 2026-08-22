@@ -9,14 +9,14 @@
  */
 import { expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Stream } from "effect"
+import { Connector } from "../../src/internal/Connector.ts"
 import {
   type Connection,
   layerConnecting,
   layerTransport,
   NatsTransport
 } from "../../src/internal/NatsTransport.ts"
-import { nodeOfficialConnect } from "../../src/internal/NodeOfficialConnect.ts"
-import { OfficialConnect } from "../../src/internal/OfficialConnect.ts"
+import { nodeConnector } from "../../src/internal/NodeConnector.ts"
 import { make as makeStatusBridge } from "../../src/internal/StatusBridge.ts"
 import { make as makeSubscriptionBridge } from "../../src/internal/SubscriptionBridge.ts"
 
@@ -152,7 +152,7 @@ it("Transport flush round-trips 20k times through the service path", async () =>
 
 it("Supervised acquire+release cycles hold steady across 2k iterations", async () => {
   const cycles = 2_000
-  const succeedLayer = Layer.succeed(OfficialConnect, {
+  const succeedLayer = Layer.succeed(Connector, {
     connect: () => Effect.succeed(infiniteStatusConnection())
   })
   const program = Effect.gen(function*() {
@@ -182,7 +182,7 @@ it("Real refused dials stay cheap and classified", async () => {
   for (let i = 0; i < attempts; i++) {
     const { ms } = await measure(() =>
       Effect.runPromise(
-        Effect.result(nodeOfficialConnect.connect({ servers: ["nats://127.0.0.1:1"] }))
+        Effect.result(nodeConnector.connect({ servers: ["nats://127.0.0.1:1"] }))
       )
     )
     durations.push(ms)

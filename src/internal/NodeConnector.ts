@@ -7,8 +7,8 @@ import {
 } from "@nats-io/nats-core"
 import { connect } from "@nats-io/transport-node"
 import { Effect, Layer } from "effect"
+import { Connector, type Interface } from "./Connector.ts"
 import { ConnectFatalError, type ConnectIssue, ConnectTransientError } from "./Errors.ts"
-import { type Interface, OfficialConnect } from "./OfficialConnect.ts"
 
 const systemCodeOf = (cause: unknown): string | undefined => {
   if (typeof cause !== "object" || cause === null || !("cause" in cause)) return undefined
@@ -25,7 +25,7 @@ const messageOf = (cause: unknown): string | undefined =>
     : undefined
 
 /**
- * Maps one official connect rejection to a classified issue.
+ * Maps one connect-time rejection to a classified issue.
  *
  * Evidence: `@nats-io/transport-node@3.4.0` wraps every dial failure in
  * `ConnectionError` (`lib/node_transport.js:68-79`) with the system error as
@@ -36,7 +36,7 @@ const messageOf = (cause: unknown): string | undefined =>
  * while genuinely fatal classes are enumerated above.
  */
 export const classifyConnectCause = (cause: unknown): ConnectIssue => {
-  const operation = "OfficialConnect.connect"
+  const operation = "Connector.connect"
   const detail = messageOf(cause)
   if (
     cause instanceof AuthorizationError
@@ -58,11 +58,11 @@ export const classifyConnectCause = (cause: unknown): ConnectIssue => {
 }
 
 /**
- * The production `OfficialConnect`: one wrapped call to the official Node
+ * The production `Connector`: one wrapped call to the Node
  * connect entry point. No retries here - supervision belongs to the acquire
  * loop above this seam.
  */
-export const nodeOfficialConnect: Interface = {
+export const nodeConnector: Interface = {
   connect: ({ servers }: { readonly servers: ReadonlyArray<string> }) =>
     Effect.tryPromise({
       try: () => connect({ servers: [...servers] }),
@@ -70,7 +70,7 @@ export const nodeOfficialConnect: Interface = {
     })
 }
 
-export const layerNodeOfficialConnect = Layer.succeed(
-  OfficialConnect,
-  nodeOfficialConnect
+export const layerNodeConnector = Layer.succeed(
+  Connector,
+  nodeConnector
 )

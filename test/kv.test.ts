@@ -55,7 +55,7 @@ it.effect("create fails on live keys but succeeds over delete and purge markers"
     yield* store.create(key("k"), bytes("v1"))
     const conflict = yield* Effect.flip(store.create(key("k"), bytes("again")))
     expect(conflict._tag).toBe("KvConflict")
-    // deleted key: create must succeed through the tombstone (official semantics)
+    // deleted key: create must succeed through the tombstone (upstream semantics)
     yield* store.delete(key("k"))
     const recreated = yield* store.create(key("k"), bytes("v2"))
     expect(recreated > 2n).toBe(true)

@@ -9,12 +9,9 @@ import {
 } from "@nats-io/nats-core"
 import { Effect } from "effect"
 import type { ConnectFatalError, ConnectTransientError } from "../../src/internal/Errors.ts"
-import {
-  classifyConnectCause,
-  nodeOfficialConnect
-} from "../../src/internal/NodeOfficialConnect.ts"
+import { classifyConnectCause, nodeConnector } from "../../src/internal/NodeConnector.ts"
 
-it("classifies official connect-time errors", () => {
+it("classifies connect-time error classes", () => {
   const auth = classifyConnectCause(new AuthorizationError("authorization violation"))
   const expired = classifyConnectCause(new UserAuthenticationExpiredError("creds expired"))
   for (const issue of [auth, expired]) {
@@ -60,7 +57,7 @@ it("classifies refused dials by their system cause code", () => {
 it.effect("a live dial to a closed local port surfaces transient refusal", () =>
   Effect.gen(function*() {
     const failure = yield* Effect.flip(
-      nodeOfficialConnect.connect({ servers: ["nats://127.0.0.1:1"] })
+      nodeConnector.connect({ servers: ["nats://127.0.0.1:1"] })
     )
     expect(failure._tag).toBe("ConnectTransientError")
     expect((failure as ConnectTransientError).reason).toBe("refused")
