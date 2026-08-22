@@ -20,5 +20,13 @@ Accepted ADRs:
 - [ADR-0002: Wrap the official client first](adr-0002-wrap-official-client.md)
 - [ADR-0003: KV naming strictness](adr-0003-kv-naming-strictness.md)
 - [ADR-0004: Revision and sequence representation](adr-0004-revision-representation.md)
+- [ADR-0005: Configuration layers and buffer honesty](adr-0005-configuration-layers.md)
 
-Draft workbench material (not decisions): [kv-slice-scoping.md](kv-slice-scoping.md)
+Proposed ADRs (not accepted decisions):
+
+- [ADR-0006: Object Store stream and Schema boundary](adr-0006-object-store-stream-and-schema-boundary.md)
+
+Draft workbench material (not decisions):
+
+- [KV slice scoping](kv-slice-scoping.md)
+- [Object Store slice scoping](object-store-slice-scoping.md)
