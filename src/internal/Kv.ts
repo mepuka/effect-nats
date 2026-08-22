@@ -3,6 +3,7 @@ import type {
   ConsumeEvent,
   ConsumerLagged,
   RollupNotPermitted,
+  SequenceNotProvablyExact,
   StartPosition,
   StoredMessage,
   StreamNotFound,
@@ -105,34 +106,60 @@ export class KvWatchLagged extends Schema.TaggedError<KvWatchLagged>()("KvWatchL
   lastRevision: Schema.BigInt
 }) {}
 
+/**
+ * The adapter could not prove a revision exact (ADR-0004: a JSON-number
+ * sequence beyond 2^53, or a malformed wire value). The operation may have
+ * committed server-side; only its revision is unusable.
+ */
+export class KvRevisionNotExact extends Schema.TaggedError<KvRevisionNotExact>()(
+  "KvRevisionNotExact",
+  {
+    bucket: Schema.String,
+    operation: Schema.String,
+    raw: Schema.String
+  }
+) {}
+
 export interface KvBucket {
   readonly get: (
     key: KvKey
-  ) => Effect.Effect<Option.Option<KvEntry>, KvBucketMissing | KvEntryViolation>
-  readonly put: (key: KvKey, value: Uint8Array) => Effect.Effect<bigint, KvBucketMissing>
+  ) => Effect.Effect<
+    Option.Option<KvEntry>,
+    KvBucketMissing | KvEntryViolation | KvRevisionNotExact
+  >
+  readonly put: (
+    key: KvKey,
+    value: Uint8Array
+  ) => Effect.Effect<bigint, KvBucketMissing | KvRevisionNotExact>
   readonly create: (
     key: KvKey,
     value: Uint8Array
-  ) => Effect.Effect<bigint, KvBucketMissing | KvConflict>
+  ) => Effect.Effect<bigint, KvBucketMissing | KvConflict | KvRevisionNotExact>
   readonly update: (
     key: KvKey,
     value: Uint8Array,
     expected: bigint
-  ) => Effect.Effect<bigint, KvBucketMissing | KvConflict>
-  readonly delete: (key: KvKey) => Effect.Effect<void, KvBucketMissing>
-  readonly purge: (key: KvKey) => Effect.Effect<void, KvBucketMissing>
+  ) => Effect.Effect<bigint, KvBucketMissing | KvConflict | KvRevisionNotExact>
+  readonly delete: (key: KvKey) => Effect.Effect<void, KvBucketMissing | KvRevisionNotExact>
+  readonly purge: (key: KvKey) => Effect.Effect<void, KvBucketMissing | KvRevisionNotExact>
   readonly history: (
     key: KvKey
-  ) => Stream.Stream<KvEntry, KvBucketMissing | KvEntryViolation | KvWatchLagged>
+  ) => Stream.Stream<
+    KvEntry,
+    KvBucketMissing | KvEntryViolation | KvWatchLagged | KvRevisionNotExact
+  >
   readonly watch: (
     options?: WatchOptions
   ) => Stream.Stream<
     KvWatchEvent,
-    KvBucketMissing | KvEntryViolation | KvInvalidFilter | KvWatchLagged
+    KvBucketMissing | KvEntryViolation | KvInvalidFilter | KvWatchLagged | KvRevisionNotExact
   >
   readonly keys: (
     options?: WatchOptions
-  ) => Stream.Stream<KvKey, KvBucketMissing | KvEntryViolation | KvInvalidFilter | KvWatchLagged>
+  ) => Stream.Stream<
+    KvKey,
+    KvBucketMissing | KvEntryViolation | KvInvalidFilter | KvWatchLagged | KvRevisionNotExact
+  >
   readonly status: () => Effect.Effect<KvStatus, KvBucketMissing>
 }
 
@@ -189,11 +216,16 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
   const makeBucket = (bucket: KvBucketName, stream: string, depth: number): KvBucket => {
     const bucketMissing = () => new KvBucketMissing({ bucket })
 
+    const revisionNotExact = (error: SequenceNotProvablyExact): KvRevisionNotExact =>
+      new KvRevisionNotExact({ bucket, operation: error.operation, raw: error.raw })
+
     const consumeError = (
-      error: StreamNotFound | ConsumerLagged
-    ): KvBucketMissing | KvWatchLagged =>
+      error: StreamNotFound | ConsumerLagged | SequenceNotProvablyExact
+    ): KvBucketMissing | KvWatchLagged | KvRevisionNotExact =>
       error._tag === "ConsumerLagged"
         ? new KvWatchLagged({ bucket, lastRevision: error.lastDeliveredSequence })
+        : error._tag === "SequenceNotProvablyExact"
+        ? revisionNotExact(error)
         : bucketMissing()
 
     // Unreachable by construction: subjects derive from parsed names and buckets
@@ -283,13 +315,15 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
           ),
           Effect.catchTag("NoMessageForSubject", () =>
             Effect.succeedNone),
+          Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
           Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing()))
         ),
 
       put: (key, value) =>
         publishInvariants(substrate.publish(stream, subjectForKey(bucket, key), value)).pipe(
           Effect.catchTag("WrongLastSequence", (e) => Effect.die(e)),
-          Effect.mapError(bucketMissing)
+          Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
+          Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing()))
         ),
 
       create: (key, value) =>
@@ -301,9 +335,13 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
           if (Result.isSuccess(first)) return first.success
           const failure = first.failure
           if (failure._tag === "StreamNotFound") return yield* bucketMissing()
+          if (failure._tag === "SequenceNotProvablyExact") {
+            return yield* revisionNotExact(failure)
+          }
           // key exists: succeed through a tombstone, conflict on a live value
           const last = yield* substrate.lastMessageForSubject(stream, subject).pipe(
             Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing())),
+            Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
             Effect.catchTag(
               "NoMessageForSubject",
               () => Effect.fail(new KvConflict({ bucket, key, expected: 0n, actual: 0n }))
@@ -317,6 +355,7 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
               })
             ).pipe(
               Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing())),
+              Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
               Effect.catchTag(
                 "WrongLastSequence",
                 (e) =>
@@ -336,6 +375,7 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
           })
         ).pipe(
           Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing())),
+          Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
           Effect.catchTag(
             "WrongLastSequence",
             (e) =>
@@ -350,7 +390,8 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
           })
         ).pipe(
           Effect.catchTag("WrongLastSequence", (e) => Effect.die(e)),
-          Effect.mapError(bucketMissing),
+          Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
+          Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing())),
           Effect.asVoid
         ),
 
@@ -364,7 +405,8 @@ export const makeKv = (substrate: JetStream["Service"]): KvService => {
           })
         ).pipe(
           Effect.catchTag("WrongLastSequence", (e) => Effect.die(e)),
-          Effect.mapError(bucketMissing),
+          Effect.catchTag("SequenceNotProvablyExact", (e) => Effect.fail(revisionNotExact(e))),
+          Effect.catchTag("StreamNotFound", () => Effect.fail(bucketMissing())),
           Effect.asVoid
         ),
 

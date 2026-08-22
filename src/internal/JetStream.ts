@@ -104,6 +104,21 @@ export class ConsumerLagged extends Schema.TaggedError<ConsumerLagged>()("Consum
   lastDeliveredSequence: Schema.BigInt
 }) {}
 
+/**
+ * ADR-0004 rule 2: a sequence the adapter could not prove exact — a JSON
+ * number beyond 2^53, a malformed header or ack token, or a client-supplied
+ * start beyond what a number-typed wire option can carry. The operation fails
+ * closed instead of laundering a possibly rounded value; `raw` preserves the
+ * offending wire text. The memory interpreter never produces this.
+ */
+export class SequenceNotProvablyExact
+  extends Schema.TaggedError<SequenceNotProvablyExact>()("SequenceNotProvablyExact", {
+    stream: Schema.String,
+    operation: Schema.String,
+    raw: Schema.String
+  })
+{}
+
 export class JetStream extends Context.Service<JetStream, {
   /** Create-only; an existing stream with identical config succeeds (idempotent). */
   createStream(config: StreamConfig): Effect.Effect<void, StreamConfigConflict>
@@ -117,12 +132,19 @@ export class JetStream extends Context.Service<JetStream, {
     options?: PublishOptions
   ): Effect.Effect<
     bigint,
-    StreamNotFound | SubjectNotBound | WrongLastSequence | RollupNotPermitted
+    | StreamNotFound
+    | SubjectNotBound
+    | WrongLastSequence
+    | RollupNotPermitted
+    | SequenceNotProvablyExact
   >
   lastMessageForSubject(
     stream: string,
     subject: string
-  ): Effect.Effect<StoredMessage, StreamNotFound | NoMessageForSubject>
+  ): Effect.Effect<
+    StoredMessage,
+    StreamNotFound | NoMessageForSubject | SequenceNotProvablyExact
+  >
   /**
    * Scoped ordered consumption: replays per `start`, emits one `CaughtUp`, then
    * continues live. Per-subscription ordering is preserved; overflow behavior
@@ -131,5 +153,5 @@ export class JetStream extends Context.Service<JetStream, {
   consume(
     stream: string,
     options: ConsumeOptions
-  ): Stream.Stream<ConsumeEvent, StreamNotFound | ConsumerLagged>
+  ): Stream.Stream<ConsumeEvent, StreamNotFound | ConsumerLagged | SequenceNotProvablyExact>
 }>()("effect-nats/JetStream") {}

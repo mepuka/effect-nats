@@ -8,13 +8,14 @@ import {
 import type { JsMsg } from "@nats-io/jetstream"
 import { headers as makeHeaders } from "@nats-io/nats-core"
 import type { MsgHdrs, NatsConnection } from "@nats-io/nats-core"
-import { Cause, Effect, Layer, Queue, Stream } from "effect"
+import { Cause, Effect, Layer, Queue, Result, Schema, Stream } from "effect"
 import type { ConsumeEvent, ConsumeOptions, StoredMessage, StreamConfig } from "./JetStream.ts"
 import {
   ConsumerLagged,
   JetStream,
   NoMessageForSubject,
   RollupNotPermitted,
+  SequenceNotProvablyExact,
   StreamConfigConflict,
   StreamNotFound,
   SubjectNotBound,
@@ -39,23 +40,56 @@ const attempt = <T>(run: () => Promise<T>): Effect.Effect<Attempt<T>> =>
     )
   )
 
-// ADR-0004 rule 2: JSON-number sequences convert only when provably exact.
-// The typed SequenceNotProvablyExact channel arrives with the DIRECT.GET
-// lastMessage slice; until then an unsafe value is a loud defect, never a
-// silently rounded bigint.
-const toSequence = (value: number, operation: string): bigint => {
-  if (!Number.isSafeInteger(value)) {
-    throw new Error(`SequenceNotProvablyExact: ${operation} received ${value} beyond 2^53`)
+const decodeSequenceString = Schema.decodeUnknownResult(Schema.BigIntFromString)
+
+// ADR-0004 rule 1: string-borne sequences (DIRECT.GET headers, ack-subject
+// tokens) decode losslessly; the digit-string guard turns a malformed value
+// into a typed failure instead of a rounded number.
+const exactFromString = (
+  raw: string | undefined,
+  stream: string,
+  operation: string
+): Result.Result<bigint, SequenceNotProvablyExact> => {
+  if (raw !== undefined && raw !== "") {
+    const decoded = decodeSequenceString(raw)
+    if (Result.isSuccess(decoded) && decoded.success >= 0n) {
+      return Result.succeed(decoded.success)
+    }
   }
-  return BigInt(value)
+  return Result.fail(new SequenceNotProvablyExact({ stream, operation, raw: String(raw) }))
 }
 
-const fromSequence = (value: bigint, operation: string): number => {
-  if (value > 9007199254740991n) {
-    throw new Error(`SequenceNotProvablyExact: ${operation} cannot carry ${value} beyond 2^53`)
-  }
-  return Number(value)
+// ADR-0004 rule 2: a sequence that reached the adapter only as a JSON number
+// converts only when provably exact — JSON.parse has already rounded anything
+// beyond 2^53, so the operation fails closed.
+const exactFromNumber = (
+  value: number,
+  stream: string,
+  operation: string
+): Result.Result<bigint, SequenceNotProvablyExact> =>
+  Number.isSafeInteger(value)
+    ? Result.succeed(BigInt(value))
+    : Result.fail(new SequenceNotProvablyExact({ stream, operation, raw: String(value) }))
+
+// Mirrors the official ack-subject parse (jsmsg.js parseInfo): the 9-token v1
+// form gains "_","" at index 2, then the stream sequence is token 7.
+const ackStreamSequenceToken = (reply: string): string | undefined => {
+  const tokens = reply.split(".")
+  if (tokens.length === 9) tokens.splice(2, 0, "_", "")
+  if (tokens.length < 11 || tokens[0] !== "$JS" || tokens[1] !== "ACK") return undefined
+  return tokens[7]
 }
+
+// DIRECT.GET responses carry their metadata as headers; these are transport
+// facts, not message headers, and must not leak into the seam's header map.
+const directMetadataHeaders = [
+  "Nats-Stream",
+  "Nats-Sequence",
+  "Nats-Time-Stamp",
+  "Nats-Subject",
+  "Nats-Last-Sequence",
+  "Nats-Num-Pending"
+]
 
 const errCode = (cause: unknown): number | undefined =>
   cause instanceof JetStreamApiError ? cause.apiError().err_code : undefined
@@ -100,6 +134,44 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
     const js = jetstream(connection)
     const jsm = yield* Effect.promise(() => jetstreamManager(connection))
 
+    // Fallback revision source for streams without allow_direct: the JSON
+    // STREAM.MSG.GET body, whose number-typed sequence rule 2 fails closed on.
+    const jsonLastMessage = (
+      stream: string,
+      subject: string
+    ): Effect.Effect<
+      StoredMessage,
+      StreamNotFound | NoMessageForSubject | SequenceNotProvablyExact
+    > =>
+      Effect.gen(function*() {
+        const result = yield* attempt(() =>
+          jsm.streams.getMessage(stream, { last_by_subj: subject })
+        )
+        if (result._tag === "err") {
+          const cause = result.cause
+          if (errCode(cause) === 10037 || messageOf(cause).includes("no message found")) {
+            return yield* new NoMessageForSubject({ stream, subject })
+          }
+          return yield* isStreamNotFound(cause)
+            ? new StreamNotFound({ stream })
+            : Effect.die(cause)
+        }
+        const stored = result.value
+        if (stored === null) {
+          return yield* new NoMessageForSubject({ stream, subject })
+        }
+        const sequence = yield* Effect.fromResult(
+          exactFromNumber(stored.seq, stream, "lastMessageForSubject StoredMsg.seq")
+        )
+        return {
+          subject: stored.subject,
+          sequence,
+          payload: stored.data,
+          headers: fromMsgHdrs(stored.header),
+          timestampMillis: stored.time.getTime()
+        } satisfies StoredMessage
+      })
+
     const service = JetStream.of({
       createStream: (config: StreamConfig) =>
         Effect.gen(function*() {
@@ -108,7 +180,10 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               name: config.name,
               subjects: [...config.subjects],
               max_msgs_per_subject: config.maxMessagesPerSubject,
-              allow_rollup_hdrs: config.allowRollup
+              allow_rollup_hdrs: config.allowRollup,
+              // ADR-0004 rule 1: DIRECT.GET is the lossless revision source,
+              // so every stream this seam creates answers direct gets
+              allow_direct: true
             })
           )
           if (result._tag === "ok") return
@@ -165,7 +240,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
             if (result.value.stream !== stream) {
               return yield* new StreamNotFound({ stream })
             }
-            return toSequence(result.value.seq, "publish PubAck.seq")
+            return yield* Effect.fromResult(
+              exactFromNumber(result.value.seq, stream, "publish PubAck.seq")
+            )
           }
           const cause = result.cause
           const message = messageOf(cause)
@@ -196,27 +273,49 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
 
       lastMessageForSubject: (stream, subject) =>
         Effect.gen(function*() {
+          // ADR-0004 rule 1: DIRECT.GET carries the sequence as the decimal
+          // string header Nats-Sequence, so the revision source is lossless.
           const result = yield* attempt(() =>
-            jsm.streams.getMessage(stream, { last_by_subj: subject })
+            jsm.direct.getMessage(stream, { last_by_subj: subject })
           )
           if (result._tag === "err") {
             const cause = result.cause
             if (errCode(cause) === 10037 || messageOf(cause).includes("no message found")) {
               return yield* new NoMessageForSubject({ stream, subject })
             }
-            return yield* isStreamNotFound(cause)
-              ? new StreamNotFound({ stream })
-              : Effect.die(cause)
+            if (isStreamNotFound(cause)) {
+              return yield* new StreamNotFound({ stream })
+            }
+            if (causeChainIncludes(cause, "no responders") || messageOf(cause).includes("503")) {
+              // no direct responder: the stream is missing, or it is a foreign
+              // bind without allow_direct — then degrade to the JSON path,
+              // which rule 2 guards with the safe-integer check
+              const exists = yield* Effect.promise(() =>
+                jsm.streams.info(stream).then(() => true, () => false)
+              )
+              if (!exists) {
+                return yield* new StreamNotFound({ stream })
+              }
+              return yield* jsonLastMessage(stream, subject)
+            }
+            return yield* Effect.die(cause)
           }
           const stored = result.value
           if (stored === null) {
             return yield* new NoMessageForSubject({ stream, subject })
           }
+          const sequence = yield* Effect.fromResult(exactFromString(
+            stored.header.last("Nats-Sequence"),
+            stream,
+            "lastMessageForSubject Nats-Sequence"
+          ))
+          const headers = new Map(fromMsgHdrs(stored.header))
+          for (const key of directMetadataHeaders) headers.delete(key)
           return {
             subject: stored.subject,
-            sequence: toSequence(stored.seq, "lastMessageForSubject StoredMsg.seq"),
+            sequence,
             payload: stored.data,
-            headers: fromMsgHdrs(stored.header),
+            headers,
             timestampMillis: stored.time.getTime()
           } satisfies StoredMessage
         }),
@@ -226,6 +325,13 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
           Effect.gen(function*() {
             const capacity = options.buffer.messages
             const start = options.start
+            if (start._tag === "FromSequence" && start.sequence > 9007199254740991n) {
+              return yield* new SequenceNotProvablyExact({
+                stream,
+                operation: "consume opt_start_seq",
+                raw: `${start.sequence}`
+              })
+            }
             // Explicit ephemeral consumer: `add` resolving is the real
             // registration witness (probe: an ordered consumer created lazily
             // at consume() lost a message published after CaughtUp — the C1
@@ -243,9 +349,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 ...(start._tag === "FromSequence"
                   ? {
                     deliver_policy: DeliverPolicy.StartSequence,
-                    // lib option is number-typed; refuse a start beyond 2^53
-                    // rather than silently rounding the bigint (ADR-0004)
-                    opt_start_seq: fromSequence(start.sequence, "consume opt_start_seq")
+                    // lib option is number-typed; a start beyond 2^53 was
+                    // refused above rather than silently rounded (ADR-0004)
+                    opt_start_seq: Number(start.sequence)
                   }
                   : {})
               })
@@ -262,18 +368,35 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               return yield* new StreamNotFound({ stream })
             }
             const consumer = gotten.value
+            // ADR-0004 rule 1: the stream sequence is read from the raw
+            // ack-subject token, not the already-parseInt'd DeliveryInfo
             const entryOf = (
               message: JsMsg
-            ): { readonly _tag: "Entry"; readonly message: StoredMessage } => ({
-              _tag: "Entry",
-              message: {
-                subject: message.subject,
-                sequence: toSequence(message.info.streamSequence, "consume streamSequence"),
-                payload: message.data,
-                headers: fromMsgHdrs(message.headers),
-                timestampMillis: message.time.getTime()
-              }
-            })
+            ): Result.Result<
+              { readonly _tag: "Entry"; readonly message: StoredMessage },
+              SequenceNotProvablyExact
+            > =>
+              Result.map(
+                exactFromString(
+                  // `reply` is on JsMsgImpl but omitted from the public JsMsg
+                  // type; an absent value fails typed through the same guard
+                  ackStreamSequenceToken(
+                    (message as { readonly reply?: string }).reply ?? ""
+                  ),
+                  stream,
+                  "consume ack streamSequence"
+                ),
+                (sequence) => ({
+                  _tag: "Entry" as const,
+                  message: {
+                    subject: message.subject,
+                    sequence,
+                    payload: message.data,
+                    headers: fromMsgHdrs(message.headers),
+                    timestampMillis: message.time.getTime()
+                  }
+                })
+              )
             if (options.buffer._tag === "PullWindow") {
               // ADR-0005 pull window: the queue bound is the whole window. The
               // loop requests one message per `next()` and `Queue.offer`
@@ -281,7 +404,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               // asked for more than the consumer can hold; publishers are
               // never suspended — the stream absorbs the backlog.
               const queue = yield* Effect.acquireRelease(
-                Queue.bounded<ConsumeEvent, StreamNotFound>(capacity),
+                Queue.bounded<ConsumeEvent, StreamNotFound | SequenceNotProvablyExact>(capacity),
                 (q) => Queue.shutdown(q)
               )
               const caughtUpEvent: ConsumeEvent = { _tag: "CaughtUp" }
@@ -312,7 +435,12 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                     }
                     continue
                   }
-                  yield* Queue.offer(queue, entryOf(message))
+                  const entry = entryOf(message)
+                  if (Result.isFailure(entry)) {
+                    yield* Queue.failCause(queue, Cause.fail(entry.failure))
+                    return
+                  }
+                  yield* Queue.offer(queue, entry.success)
                   if (!caughtUp && message.info.pending === 0) {
                     caughtUp = true
                     yield* Queue.offer(queue, caughtUpEvent)
@@ -323,7 +451,10 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               return Stream.fromQueue(queue)
             }
             const queue = yield* Effect.acquireRelease(
-              Queue.bounded<ConsumeEvent, StreamNotFound | ConsumerLagged>(capacity + 1),
+              Queue.bounded<
+                ConsumeEvent,
+                StreamNotFound | ConsumerLagged | SequenceNotProvablyExact
+              >(capacity + 1),
               (q) => Queue.shutdown(q)
             )
             let caughtUp = info.num_pending === 0
@@ -332,7 +463,13 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
             let stop = () => {}
             const callback = (message: JsMsg) => {
               const entry = entryOf(message)
-              const admitted = Queue.sizeUnsafe(queue) < capacity && Queue.offerUnsafe(queue, entry)
+              if (Result.isFailure(entry)) {
+                Queue.failCauseUnsafe(queue, Cause.fail(entry.failure))
+                stop()
+                return
+              }
+              const admitted = Queue.sizeUnsafe(queue) < capacity
+                && Queue.offerUnsafe(queue, entry.success)
               if (!admitted) {
                 Queue.failCauseUnsafe(
                   queue,
@@ -341,7 +478,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 stop()
                 return
               }
-              lastDelivered = entry.message.sequence
+              lastDelivered = entry.success.message.sequence
               if (!caughtUp && message.info.pending === 0) {
                 caughtUp = true
                 Queue.offerUnsafe(queue, { _tag: "CaughtUp" })

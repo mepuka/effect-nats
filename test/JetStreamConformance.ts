@@ -98,10 +98,17 @@ export const conformance = (label: string, withService: WithService, timeout = 2
       Effect.gen(function*() {
         yield* service.createStream(kvConfig("b"))
         yield* service.publish("KV_b", "$KV.b.k", utf8.encode("old"))
-        yield* service.publish("KV_b", "$KV.b.k", utf8.encode("new"))
+        yield* service.publish("KV_b", "$KV.b.k", utf8.encode("new"), {
+          headers: new Map([["KV-Operation", "DEL"]])
+        })
         const last = yield* service.lastMessageForSubject("KV_b", "$KV.b.k")
         expect(text(last)).toBe("new")
         expect(last.sequence).toBe(2n)
+        // user headers survive; transport metadata (the live adapter's
+        // DIRECT.GET Nats-* headers) must not leak into the seam's map
+        expect(last.headers.get("KV-Operation")).toBe("DEL")
+        expect(last.headers.has("Nats-Sequence")).toBe(false)
+        expect(last.headers.has("Nats-Subject")).toBe(false)
         const absent = yield* Effect.flip(service.lastMessageForSubject("KV_b", "$KV.b.none"))
         expect(absent._tag).toBe("NoMessageForSubject")
       })
