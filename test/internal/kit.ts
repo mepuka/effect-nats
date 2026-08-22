@@ -3,7 +3,7 @@
  * official client boundary with explicit behavior controls and observation
  * surfaces. No servers, no wall time.
  */
-import { Clock, Effect, Layer, Queue } from "effect"
+import { Cause, Clock, Effect, Layer, Queue } from "effect"
 import type { ConnectIssue } from "../../src/internal/Errors.ts"
 import type { Connection, OfficialStatus } from "../../src/internal/NatsTransport.ts"
 import type { Interface as OfficialConnectInterface } from "../../src/internal/OfficialConnect.ts"
@@ -14,6 +14,8 @@ export interface FakeOfficialObserved {
   drainCalls: number
   closeCalls: number
   statusIterations: number
+  /** Generator terminations (return/interrupt), proving exactly-once release. */
+  statusReturnCalls: number
 }
 
 export type StubMode = "ok" | "hang" | "fail"
@@ -34,18 +36,21 @@ export interface FakeOfficial {
   readonly endStatus: Effect.Effect<void>
   /** Marks the connection closed, as the official client does after close. */
   readonly markClosed: Effect.Effect<void>
+  /** Signals once the status iterator has been entered (first pull pending). */
+  readonly statusStarted: Queue.Queue<void>
 }
 
 export const makeFakeOfficial = (): Effect.Effect<FakeOfficial> =>
   Effect.gen(function*() {
-    const statusQueue = yield* Queue.bounded<OfficialStatus>(64)
-    let statusDone = false
+    const statusQueue = yield* Queue.bounded<OfficialStatus, Cause.Done>(64)
+    const statusStarted = yield* Queue.bounded<void>(1)
 
     const observed: FakeOfficialObserved = {
       flushCalls: 0,
       drainCalls: 0,
       closeCalls: 0,
-      statusIterations: 0
+      statusIterations: 0,
+      statusReturnCalls: 0
     }
     const controls = { flush: "ok" as StubMode, drain: "ok" as StubMode, close: "ok" as StubMode }
     let closed = false
@@ -77,12 +82,29 @@ export const makeFakeOfficial = (): Effect.Effect<FakeOfficial> =>
       },
       isClosed: () => closed,
       isDraining: () => false,
+      // Manual iterator mirroring the official queued-iterator contract:
+      // a parked next() stays pending until a delivery or feed end; end
+      // drains what was already admitted, then completes; return() settles
+      // immediately and is observable exactly once.
       status: () => ({
-        async *[Symbol.asyncIterator]() {
+        [Symbol.asyncIterator]() {
           observed.statusIterations++
-          while (!statusDone) {
-            const next = await Effect.runPromise(Queue.take(statusQueue))
-            yield next
+          Queue.offerUnsafe(statusStarted, undefined)
+          let returned = false
+          const done = { value: undefined, done: true } as const
+          return {
+            next: (): Promise<IteratorResult<OfficialStatus>> =>
+              returned
+                ? Promise.resolve(done)
+                : Effect.runPromise(Queue.take(statusQueue)).then(
+                  (value) => ({ value, done: false }) as IteratorResult<OfficialStatus>,
+                  () => done
+                ),
+            return: (): Promise<IteratorResult<OfficialStatus>> => {
+              observed.statusReturnCalls++
+              returned = true
+              return Promise.resolve(done)
+            }
           }
         }
       })
@@ -93,12 +115,11 @@ export const makeFakeOfficial = (): Effect.Effect<FakeOfficial> =>
       observed,
       controls,
       deliverStatus: (status) => Queue.offerUnsafe(statusQueue, status) ? Effect.void : Effect.void,
-      endStatus: Effect.sync(() => {
-        statusDone = true
-      }),
+      endStatus: Queue.end(statusQueue),
       markClosed: Effect.sync(() => {
         closed = true
-      })
+      }),
+      statusStarted
     }
   })
 

@@ -1,13 +1,13 @@
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { layerFromOfficial, NatsTransport } from "../../src/internal/NatsTransport.ts"
+import { layerTransport, NatsTransport } from "../../src/internal/NatsTransport.ts"
 import { makeFakeOfficial } from "./kit.ts"
 
 it.effect("flush round-trips while the layer is open", () =>
   Effect.gen(function*() {
     const fake = yield* makeFakeOfficial()
-    const layer = layerFromOfficial(fake.connection)
+    const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use((transport) => transport.flush()).pipe(Effect.provide(layer))
     )
@@ -17,7 +17,7 @@ it.effect("flush round-trips while the layer is open", () =>
 it.effect("closing the layer drains and closes the underlying connection once", () =>
   Effect.gen(function*() {
     const fake = yield* makeFakeOfficial()
-    const layer = layerFromOfficial(fake.connection)
+    const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use(() => Effect.void).pipe(Effect.provide(layer))
     )
@@ -28,7 +28,7 @@ it.effect("closing the layer drains and closes the underlying connection once", 
 it.effect("flush fails with ConnectionClosedError once the connection is closed", () =>
   Effect.gen(function*() {
     const fake = yield* makeFakeOfficial()
-    const layer = layerFromOfficial(fake.connection)
+    const layer = layerTransport(fake.connection)
     yield* Effect.scoped(
       NatsTransport.use((transport) =>
         Effect.gen(function*() {
@@ -46,7 +46,7 @@ it.effect("a hanging drain is abandoned at the deadline and close still runs", (
     const fake = yield* makeFakeOfficial()
     fake.controls.drain = "hang"
     const scope = yield* Scope.make()
-    yield* Layer.build(layerFromOfficial(fake.connection, { drainTimeout: "5 seconds" })).pipe(
+    yield* Layer.build(layerTransport(fake.connection, { drainTimeout: "5 seconds" })).pipe(
       Scope.provide(scope)
     )
     // closing blocks on the release finalizer, which is stuck in the drain

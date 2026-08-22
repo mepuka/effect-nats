@@ -40,7 +40,7 @@ export class NatsTransport extends Context.Service<NatsTransport, Interface>()(
  * optional `drainTimeout`. The underlying official drain promise cannot be
  * cancelled, so a timeout abandons (not cancels) it.
  */
-export const layerTransport= (
+export const layerTransport = (
   connection: Connection,
   options?: {
     readonly drainTimeout?: Duration.Input | undefined
