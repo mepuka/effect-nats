@@ -4,17 +4,22 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "node scripts/check.mjs",
     "test": "vitest run",
     "lint": "oxlint src test vitest.config.ts",
     "format": "dprint fmt",
-    "format:check": "dprint check"
+    "format:check": "dprint check",
+    "perf": "vitest run test/internal/transport.perf.test.ts",
+    "leak": "bun scripts/leak-check.ts"
   },
   "dependencies": {
+    "@nats-io/nats-core": "^3.4.0",
+    "@nats-io/transport-node": "^3.4.0",
     "effect": "4.0.0-rc.111"
   },
   "devDependencies": {
     "@effect/tsgo": "0.36.5",
+    "@types/node": "26.2.0",
     "@effect/vitest": "4.0.0-rc.111",
     "dprint": "0.56.1",
     "oxlint": "1.79.0",
