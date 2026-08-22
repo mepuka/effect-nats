@@ -6,6 +6,9 @@ root export stays empty until an ADR approves the first API surface.
 
 ## Read before changing
 
+- **Open findings:** before planning, implementation, or review, read `TO_FIX.md`. Confirmed items
+  block overlapping work until corrected and reverified; watch items guide inspection but do not
+  authorize unresolved design choices.
 - **Implementation or review:** invoke the repository-local `effect-nats-implementation` skill at
   `.agents/skills/effect-nats-implementation/SKILL.md` and follow its fidelity receipt.
 - **Feature, fix, stream, lifecycle, or integration-test work:** also invoke the repository-local
