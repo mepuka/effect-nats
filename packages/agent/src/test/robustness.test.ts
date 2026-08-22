@@ -6,13 +6,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentClient, layerClient } from "../agents/client.js"
-import { layerHost, type AgentHostConfig } from "../agents/host.js"
-import { classify, promptStream } from "../agents/prompt-engine.js"
-import { decodeChunk, wellFormed, type Frame } from "../agents/protocol/chunks.js"
-import { parseRequest } from "../agents/protocol/envelope.js"
-import { WireFailure } from "../agents/errors.js"
-import { Wire, type SubscribeOptions, type WireShape } from "../agents/wire.js"
+import { AgentClient, layerClient } from "../protocol/client.js"
+import { layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { classify, promptStream } from "../protocol/prompt-engine.js"
+import { decodeChunk, wellFormed, type Frame } from "../protocol/protocol/chunks.js"
+import { parseRequest } from "../protocol/protocol/envelope.js"
+import { WireFailure } from "../protocol/errors.js"
+import { Wire, type SubscribeOptions, type WireShape } from "../protocol/wire.js"
 import { chunk, makeLoopbackBus, makeScriptedWire, msg, terminator, type LoopbackBus, type ScriptEntry } from "./kit.js"
 
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -395,7 +395,7 @@ describe("registration and discovery readiness", () => {
 
 describe("numeric safety", () => {
   test("max_payload byte counts beyond MAX_SAFE_INTEGER are rejected", async () => {
-    const { parseMaxPayload } = await import("../agents/protocol/validation.js")
+    const { parseMaxPayload } = await import("../protocol/protocol/validation.js")
     expect(parseMaxPayload("8589934592GB")).toBeNull()
     expect(parseMaxPayload("9007199254740993B")).toBeNull()
     expect(parseMaxPayload("4GB")).toBe(4 * 1024 ** 3)

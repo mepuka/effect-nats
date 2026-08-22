@@ -9,8 +9,8 @@ import {
   isRequestError,
   parseRequest,
   type RequestEnvelope,
-} from "../agents/protocol/envelope.js"
-import { isToken, matchSubject, type Pattern } from "../agents/protocol/subjects.js"
+} from "../protocol/protocol/envelope.js"
+import { isToken, matchSubject, type Pattern } from "../protocol/protocol/subjects.js"
 import {
   ACK,
   PUMP_START,
@@ -20,7 +20,7 @@ import {
   TERMINATOR,
   wellFormed,
   type Frame,
-} from "../agents/protocol/chunks.js"
+} from "../protocol/protocol/chunks.js"
 
 const PARAMS = { numRuns: 300 }
 

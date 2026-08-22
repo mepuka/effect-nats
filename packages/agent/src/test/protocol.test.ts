@@ -13,13 +13,13 @@ import {
   literalPattern,
   matchSubject,
   parseAgentSubject,
-} from "../agents/protocol/subjects.js"
+} from "../protocol/protocol/subjects.js"
 import {
   encodeRequest,
   isRequestError,
   parseRequest,
   type RequestEnvelope,
-} from "../agents/protocol/envelope.js"
+} from "../protocol/protocol/envelope.js"
 import {
   ACK,
   ERROR_CODES,
@@ -28,8 +28,8 @@ import {
   decodeChunk,
   errorFrame,
   wellFormed,
-} from "../agents/protocol/chunks.js"
-import { parseMaxPayload, validateLocal } from "../agents/protocol/validation.js"
+} from "../protocol/protocol/chunks.js"
+import { parseMaxPayload, validateLocal } from "../protocol/protocol/validation.js"
 import { Result } from "effect"
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s)

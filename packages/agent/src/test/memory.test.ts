@@ -5,9 +5,9 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentClient, layerClient } from "../agents/client.js"
-import { layerHost, type AgentHostConfig } from "../agents/host.js"
-import { Wire } from "../agents/wire.js"
+import { AgentClient, layerClient } from "../protocol/client.js"
+import { layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { Wire } from "../protocol/wire.js"
 import { makeLoopbackBus, type LoopbackBus } from "./kit.js"
 
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>

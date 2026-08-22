@@ -7,12 +7,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentFailure } from "../agents/errors.js"
-import { AgentClient, layerClient } from "../agents/client.js"
-import { AgentHost, layerHost, type AgentHostConfig } from "../agents/host.js"
-import { classify } from "../agents/prompt-engine.js"
-import { wellFormed, type Frame } from "../agents/protocol/chunks.js"
-import { Wire } from "../agents/wire.js"
+import { AgentFailure } from "../protocol/errors.js"
+import { AgentClient, layerClient } from "../protocol/client.js"
+import { AgentHost, layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { classify } from "../protocol/prompt-engine.js"
+import { wellFormed, type Frame } from "../protocol/protocol/chunks.js"
+import { Wire } from "../protocol/wire.js"
 import { makeLoopbackBus, msg, type LoopbackBus } from "./kit.js"
 
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>

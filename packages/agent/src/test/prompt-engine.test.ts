@@ -6,10 +6,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Fiber, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { promptStream } from "../agents/prompt-engine.js"
-import type { PromptError } from "../agents/errors.js"
-import type { Chunk } from "../agents/protocol/chunks.js"
-import { Wire } from "../agents/wire.js"
+import { promptStream } from "../protocol/prompt-engine.js"
+import type { PromptError } from "../protocol/errors.js"
+import type { Chunk } from "../protocol/protocol/chunks.js"
+import { Wire } from "../protocol/wire.js"
 import { at, chunk, makeScriptedWire, msg, terminator, type ScriptEntry } from "./kit.js"
 
 const runScripted = <A, E>(

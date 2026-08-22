@@ -11,7 +11,7 @@ import type {
   ReplyMessage,
   SubscribeOptions,
   WireShape,
-} from "../agents/wire.js"
+} from "../protocol/wire.js"
 
 const encoder = new TextEncoder()
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Queue, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentHost, layerHost, type AgentHostConfig } from "../agents/host.js"
-import { classify } from "../agents/prompt-engine.js"
+import { AgentHost, layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { classify } from "../protocol/prompt-engine.js"
 import {
   ACK,
   TERMINATOR,
@@ -11,19 +11,19 @@ import {
   errorFrame,
   wellFormed,
   type Frame,
-} from "../agents/protocol/chunks.js"
+} from "../protocol/protocol/chunks.js"
 import {
   encodeRequest,
   isRequestError,
   parseRequest,
   type RequestEnvelope,
-} from "../agents/protocol/envelope.js"
+} from "../protocol/protocol/envelope.js"
 import {
   literalPattern,
   matchSubject,
   type Pattern,
-} from "../agents/protocol/subjects.js"
-import { Wire } from "../agents/wire.js"
+} from "../protocol/protocol/subjects.js"
+import { Wire } from "../protocol/wire.js"
 import { makeLoopbackBus, msg, type LoopbackBus } from "./kit.js"
 
 const encoder = new TextEncoder()

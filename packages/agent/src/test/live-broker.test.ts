@@ -8,12 +8,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { connect as netConnect } from "node:net"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { AgentClient, layerClient } from "../agents/client.js"
-import { layerHost, type AgentHostConfig } from "../agents/host.js"
-import { NatsConnection } from "../agents/nats-connection.js"
-import { layerLive } from "../agents/nats-wire.js"
-import { promptStream } from "../agents/prompt-engine.js"
-import { Wire } from "../agents/wire.js"
+import { AgentClient, layerClient } from "../protocol/client.js"
+import { layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { NatsConnection } from "../protocol/nats-connection.js"
+import { layerLive } from "../protocol/nats-wire.js"
+import { promptStream } from "../protocol/prompt-engine.js"
+import { Wire } from "../protocol/wire.js"
 
 const NATS_BIN = Bun.which("nats-server")
 const PORT = 24000 + Math.floor(Math.random() * 1000)

@@ -6,10 +6,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Result, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { AgentClient, isCompatibleProtocolVersion, layerClient } from "../agents/client.js"
-import { AgentFailure, type PromptError } from "../agents/errors.js"
-import { AgentHost, layerHost, type AgentHostConfig } from "../agents/host.js"
-import { classify, promptStream } from "../agents/prompt-engine.js"
+import { AgentClient, isCompatibleProtocolVersion, layerClient } from "../protocol/client.js"
+import { AgentFailure, type PromptError } from "../protocol/errors.js"
+import { AgentHost, layerHost, type AgentHostConfig } from "../protocol/host.js"
+import { classify, promptStream } from "../protocol/prompt-engine.js"
 import {
   decodeChunk,
   decodeHeartbeat,
@@ -18,10 +18,10 @@ import {
   wellFormed,
   type Chunk,
   type Frame,
-} from "../agents/protocol/chunks.js"
-import { isRequestError, parseRequest } from "../agents/protocol/envelope.js"
-import { isConventionalToken, parseAgentSubject } from "../agents/protocol/subjects.js"
-import { Wire } from "../agents/wire.js"
+} from "../protocol/protocol/chunks.js"
+import { isRequestError, parseRequest } from "../protocol/protocol/envelope.js"
+import { isConventionalToken, parseAgentSubject } from "../protocol/protocol/subjects.js"
+import { Wire } from "../protocol/wire.js"
 import {
   chunk,
   makeLoopbackBus,
