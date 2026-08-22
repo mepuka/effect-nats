@@ -19,61 +19,82 @@ import { ConnectionClosedError, SlowConsumerError } from "./Errors.ts"
  * Producers never suspend: `offer` is a bounded non-suspending admission, so a
  * synchronous NATS callback cannot silently stall delivery.
  */
-export interface SubscriptionBridge<A> {
+export interface SubscriptionBridge<A, E = never> {
+  /** Synchronous, non-suspending admission for callback producers. */
+  readonly offerUnsafe: (value: A) => SlowConsumerError | ConnectionClosedError | undefined
   readonly offer: (
     value: A
   ) => Effect.Effect<void, SlowConsumerError | ConnectionClosedError>
+  /** Terminates the stream with an adapter error and rejects later admission. */
+  readonly failUnsafe: (error: E) => boolean
+  /** Ends the stream synchronously and rejects later admission. */
+  readonly endUnsafe: () => boolean
   readonly end: Effect.Effect<void>
-  readonly stream: Stream.Stream<A, SlowConsumerError>
+  readonly stream: Stream.Stream<A, SlowConsumerError | E>
 }
 
-export const make = <A>(options: {
+export const make = <A, E = never>(options: {
   readonly operation: string
   readonly subject: string
   readonly capacity: number
-}): Effect.Effect<SubscriptionBridge<A>> =>
+}): Effect.Effect<SubscriptionBridge<A, E>> =>
   Effect.gen(function*() {
     if (!Number.isInteger(options.capacity) || options.capacity <= 0) {
       return yield* Effect.die(
         new Error(`SubscriptionBridge capacity must be a positive integer, got ${options.capacity}`)
       )
     }
-    const queue = yield* Queue.bounded<A, Cause.Done | SlowConsumerError>(options.capacity)
-    let terminal: SlowConsumerError | ConnectionClosedError | undefined
+    const queue = yield* Queue.bounded<A, Cause.Done | SlowConsumerError | E>(options.capacity)
+    let admissionTerminal: SlowConsumerError | ConnectionClosedError | undefined
     let ended = false
 
-    const offer = (
-      value: A
-    ): Effect.Effect<void, SlowConsumerError | ConnectionClosedError> =>
-      Effect.gen(function*() {
-        if (terminal !== undefined) return yield* terminal
-        if (!ended && Queue.offerUnsafe(queue, value)) return
-        const error = ended
-          ? new ConnectionClosedError({
-            operation: options.operation
-          })
-          : new SlowConsumerError({
-            operation: options.operation,
-            subject: options.subject,
-            capacity: options.capacity,
-            pending: Queue.sizeUnsafe(queue)
-          })
-        terminal = error
-        if (!ended) {
-          Queue.failCauseUnsafe(queue, Cause.fail(error as SlowConsumerError))
-        }
-        return yield* error
+    const offerUnsafe = (value: A): SlowConsumerError | ConnectionClosedError | undefined => {
+      if (admissionTerminal !== undefined) return admissionTerminal
+      if (!ended && Queue.offerUnsafe(queue, value)) return undefined
+      if (ended) {
+        const error = new ConnectionClosedError({ operation: options.operation })
+        admissionTerminal = error
+        return error
+      }
+      const error = new SlowConsumerError({
+        operation: options.operation,
+        subject: options.subject,
+        capacity: options.capacity,
+        pending: Queue.sizeUnsafe(queue)
       })
+      admissionTerminal = error
+      Queue.failCauseUnsafe(queue, Cause.fail(error))
+      return error
+    }
 
-    const end: Effect.Effect<void> = Effect.andThen(
-      Effect.sync(() => {
-        ended = true
-      }),
-      Effect.asVoid(Queue.end(queue))
-    )
+    const offer = (value: A): Effect.Effect<void, SlowConsumerError | ConnectionClosedError> => {
+      const error = offerUnsafe(value)
+      return error === undefined ? Effect.void : Effect.fail(error)
+    }
+
+    const failUnsafe = (error: E): boolean => {
+      if (ended || admissionTerminal !== undefined) return false
+      ended = true
+      admissionTerminal = new ConnectionClosedError({ operation: options.operation })
+      return Queue.failCauseUnsafe(queue, Cause.fail(error))
+    }
+
+    const endUnsafe = (): boolean => {
+      if (ended || admissionTerminal !== undefined) return false
+      ended = true
+      admissionTerminal = new ConnectionClosedError({ operation: options.operation })
+      return Queue.endUnsafe(queue)
+    }
+
+    const end: Effect.Effect<void> = Effect.sync(() => {
+      endUnsafe()
+    })
 
     return {
+      offerUnsafe,
       offer,
+      failUnsafe,
+      endUnsafe,
       end,
       stream: Stream.fromQueue(queue)
     }

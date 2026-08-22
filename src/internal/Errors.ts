@@ -3,9 +3,10 @@ import { Schema } from "effect"
 /**
  * A subscription could not admit delivery within its declared capacity.
  *
- * Overflow terminates the subscription: buffered values are dropped because
- * they were never processed, and both producer admission and consumer pulls
- * observe this same error instance.
+ * Overflow terminates the subscription with drain-first ordering: already
+ * admitted values remain observable before the error, while the triggering
+ * value is rejected. Producer admission and consumer pulls observe the same
+ * error instance.
  */
 export class SlowConsumerError extends Schema.TaggedError<SlowConsumerError>()(
   "SlowConsumerError",

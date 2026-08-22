@@ -19,6 +19,17 @@ export class TestServerError extends Data.TaggedError("TestServerError")<{
 export interface TestServer {
   readonly port: number
   readonly url: string
+  /** Simulates a server loss while the owning test scope remains open. */
+  readonly stop: Effect.Effect<void>
+}
+
+export interface TestServerOptions {
+  readonly jetStream?: boolean | undefined
+  readonly name?: string | undefined
+  readonly tls?: {
+    readonly certFile: string
+    readonly keyFile: string
+  } | undefined
 }
 
 const freePort = Effect.callback<number>((resume) => {
@@ -58,41 +69,60 @@ const waitReady = (child: ChildProcess): Effect.Effect<void, TestServerError> =>
     })
   )
 
-export const start: Effect.Effect<TestServer, TestServerError, Scope.Scope> = freePort.pipe(
-  Effect.flatMap((port) =>
-    Effect.acquireRelease(
-      Effect.gen(function*() {
-        const storeDir = mkdtempSync(join(tmpdir(), "effect-nats-js-"))
-        const child = spawn("nats-server", [
-          "-js",
-          "-a",
-          "127.0.0.1",
-          "-p",
-          String(port),
-          "-sd",
-          storeDir
-        ], {
-          stdio: ["ignore", "ignore", "pipe"],
-          windowsHide: true
-        })
-        yield* waitReady(child)
-        return { child, storeDir, server: { port, url: `127.0.0.1:${port}` } }
-      }),
-      ({ child, storeDir }) =>
-        Effect.callback<void>((resume) => {
-          const finish = () => {
-            try {
-              rmSync(storeDir, { recursive: true, force: true })
-            } catch {
-              // best-effort temp cleanup
-            }
-            resume(Effect.void)
+const stopChild = (child: ChildProcess): Effect.Effect<void> =>
+  Effect.callback<void>((resume) => {
+    if (child.exitCode !== null || child.signalCode !== null) return resume(Effect.void)
+    child.once("exit", () => resume(Effect.void))
+    child.kill()
+  })
+
+export const startWith = (
+  options: TestServerOptions = {}
+): Effect.Effect<TestServer, TestServerError, Scope.Scope> =>
+  freePort.pipe(
+    Effect.flatMap((port) =>
+      Effect.acquireRelease(
+        Effect.gen(function*() {
+          const storeDir = mkdtempSync(join(tmpdir(), "effect-nats-js-"))
+          const args = [
+            "-a",
+            "127.0.0.1",
+            "-p",
+            String(port)
+          ]
+          if (options.jetStream !== false) args.push("-js", "-sd", storeDir)
+          if (options.name !== undefined) args.push("--server_name", options.name)
+          if (options.tls !== undefined) {
+            args.push("--tls", "--tlscert", options.tls.certFile, "--tlskey", options.tls.keyFile)
           }
-          if (child.exitCode !== null) return finish()
-          child.once("exit", finish)
-          child.kill()
-        })
-    )
-  ),
-  Effect.map(({ server }) => server)
-)
+          const child = spawn("nats-server", args, {
+            stdio: ["ignore", "ignore", "pipe"],
+            windowsHide: true
+          })
+          yield* waitReady(child)
+          return {
+            child,
+            storeDir,
+            server: { port, url: `127.0.0.1:${port}`, stop: stopChild(child) }
+          }
+        }),
+        ({ child, storeDir }) =>
+          Effect.callback<void>((resume) => {
+            const finish = () => {
+              try {
+                rmSync(storeDir, { recursive: true, force: true })
+              } catch {
+                // best-effort temp cleanup
+              }
+              resume(Effect.void)
+            }
+            if (child.exitCode !== null || child.signalCode !== null) return finish()
+            child.once("exit", finish)
+            child.kill()
+          })
+      )
+    ),
+    Effect.map(({ server }) => server)
+  )
+
+export const start: Effect.Effect<TestServer, TestServerError, Scope.Scope> = startWith()

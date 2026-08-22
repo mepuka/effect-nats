@@ -2,6 +2,7 @@ import { Context, Effect, Layer, Schedule } from "effect"
 import type { Duration } from "effect"
 import { Connector } from "./Connector.ts"
 import { ConnectExhaustedError, ConnectionClosedError } from "./Errors.ts"
+import type { ReconnectPolicy } from "./ReconnectPolicy.ts"
 
 /**
  * Structural subset of the official `@nats-io` public client surface that this
@@ -135,6 +136,7 @@ const defaultConnectSchedule = Schedule.exponential("200 millis").pipe(
  */
 export const layerConnecting = (options: {
   readonly servers: ReadonlyArray<string>
+  readonly reconnect?: ReconnectPolicy | undefined
   readonly schedule?: Schedule.Schedule<unknown> | undefined
   readonly drainTimeout?: Duration.Input | undefined
 }) =>
@@ -147,7 +149,7 @@ export const layerConnecting = (options: {
         // Re-evaluated once per retry, so the count equals every invocation
         // the schedule drives - including the final one that exhausts it.
         attempts++
-        return connector.connect({ servers: options.servers })
+        return connector.connect({ servers: options.servers, reconnect: options.reconnect })
       }).pipe(
         Effect.retry({
           schedule: options.schedule ?? defaultConnectSchedule,

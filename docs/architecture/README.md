@@ -31,5 +31,6 @@ Proposed ADRs (not accepted decisions):
 
 Draft workbench material (not decisions):
 
+- [ADR-0001 implementation and conformance status](adr-0001-conformance-status.md)
 - [KV slice scoping](kv-slice-scoping.md)
 - [Object Store slice scoping](object-store-slice-scoping.md)

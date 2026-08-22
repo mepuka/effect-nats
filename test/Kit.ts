@@ -3,7 +3,7 @@
  * underlying client boundary with explicit behavior controls and observation
  * surfaces. No servers, no wall time.
  */
-import { Cause, Clock, Effect, Layer, Queue } from "effect"
+import { Clock, Effect, Layer, Queue } from "effect"
 import type { Interface as ConnectorInterface } from "../src/internal/Connector.ts"
 import { Connector } from "../src/internal/Connector.ts"
 import type { ConnectIssue } from "../src/internal/Errors.ts"
@@ -16,6 +16,12 @@ export interface FakeConnectionObserved {
   statusIterations: number
   /** Generator terminations (return/interrupt), proving exactly-once release. */
   statusReturnCalls: number
+  /** Currently parked status `next()` calls; an exact waiter leak counter. */
+  statusWaiters: number
+  /** Status values admitted but not yet pulled. */
+  statusPending: number
+  /** The shared `closed()` promise settles at most once. */
+  closedSettlements: number
 }
 
 export type StubMode = "ok" | "hang" | "fail"
@@ -31,7 +37,7 @@ export interface FakeConnection {
     close: StubMode
   }
   /** Pushes one status frame to the status feed. */
-  readonly deliverStatus: (status: ServerStatus) => Effect.Effect<void>
+  readonly deliverStatus: (status: ServerStatus) => Effect.Effect<boolean>
   /** Ends the status feed, as the real client does on close. */
   readonly endStatus: Effect.Effect<void>
   /** Marks the connection closed, as the real client does after close. */
@@ -42,7 +48,6 @@ export interface FakeConnection {
 
 export const makeFakeConnection = (): Effect.Effect<FakeConnection> =>
   Effect.gen(function*() {
-    const statusQueue = yield* Queue.bounded<ServerStatus, Cause.Done>(64)
     const statusStarted = yield* Queue.bounded<void>(1)
 
     const observed: FakeConnectionObserved = {
@@ -50,10 +55,61 @@ export const makeFakeConnection = (): Effect.Effect<FakeConnection> =>
       drainCalls: 0,
       closeCalls: 0,
       statusIterations: 0,
-      statusReturnCalls: 0
+      statusReturnCalls: 0,
+      statusWaiters: 0,
+      statusPending: 0,
+      closedSettlements: 0
     }
     const controls = { flush: "ok" as StubMode, drain: "ok" as StubMode, close: "ok" as StubMode }
     let closed = false
+    let statusEnded = false
+    const statuses: Array<ServerStatus> = []
+    const done = { value: undefined, done: true } as const
+    type StatusWaiter = {
+      readonly owned: Set<StatusWaiter>
+      readonly resolve: (result: IteratorResult<ServerStatus>) => void
+    }
+    const statusWaiters = new Set<StatusWaiter>()
+
+    let resolveClosed: (result: void | Error) => void = () => {}
+    const closedPromise = new Promise<void | Error>((resolve) => {
+      resolveClosed = resolve
+    })
+
+    const settleWaiter = (waiter: StatusWaiter, result: IteratorResult<ServerStatus>) => {
+      statusWaiters.delete(waiter)
+      waiter.owned.delete(waiter)
+      observed.statusWaiters = statusWaiters.size
+      waiter.resolve(result)
+    }
+
+    const settleStatusEnd = () => {
+      statusEnded = true
+      if (statuses.length === 0) {
+        for (const waiter of statusWaiters) settleWaiter(waiter, done)
+      }
+    }
+
+    const settleClosed = () => {
+      if (closed) return
+      closed = true
+      observed.closedSettlements++
+      settleStatusEnd()
+      resolveClosed(undefined)
+    }
+
+    const deliverStatus = (status: ServerStatus): boolean => {
+      if (statusEnded) return false
+      const waiter = statusWaiters.values().next().value
+      if (waiter !== undefined) {
+        settleWaiter(waiter, { value: status, done: false })
+        return true
+      }
+      if (statuses.length === 64) return false
+      statuses.push(status)
+      observed.statusPending = statuses.length
+      return true
+    }
 
     const stubbed = (mode: StubMode): Promise<void> =>
       mode === "fail"
@@ -63,17 +119,17 @@ export const makeFakeConnection = (): Effect.Effect<FakeConnection> =>
         : Promise.resolve()
 
     const connection: Connection = {
-      closed: () => Promise.resolve(undefined),
+      closed: () => closedPromise,
       close: () => {
         observed.closeCalls++
         return stubbed(controls.close).then(() => {
-          closed = true
+          settleClosed()
         })
       },
       drain: () => {
         observed.drainCalls++
         return stubbed(controls.drain).then(() => {
-          closed = true
+          settleClosed()
         })
       },
       flush: () => {
@@ -82,27 +138,41 @@ export const makeFakeConnection = (): Effect.Effect<FakeConnection> =>
       },
       isClosed: () => closed,
       isDraining: () => false,
-      // Manual iterator mirroring the upstream queued-iterator contract:
+      // Manual iterator mirroring the upstream lifecycle contract without
+      // inheriting its growable buffer:
       // a parked next() stays pending until a delivery or feed end; end
       // drains what was already admitted, then completes; return() settles
-      // immediately and is observable exactly once.
+      // every parked pull immediately and is observable exactly once.
       status: () => ({
         [Symbol.asyncIterator]() {
           observed.statusIterations++
           Queue.offerUnsafe(statusStarted, undefined)
           let returned = false
-          const done = { value: undefined, done: true } as const
+          const owned = new Set<StatusWaiter>()
           return {
-            next: (): Promise<IteratorResult<ServerStatus>> =>
-              returned
-                ? Promise.resolve(done)
-                : Effect.runPromise(Queue.take(statusQueue)).then(
-                  (value) => ({ value, done: false }) as IteratorResult<ServerStatus>,
-                  () => done
-                ),
+            next: (): Promise<IteratorResult<ServerStatus>> => {
+              if (returned) return Promise.resolve(done)
+              const value = statuses.shift()
+              if (value !== undefined) {
+                observed.statusPending = statuses.length
+                if (statusEnded && statuses.length === 0) {
+                  for (const waiter of statusWaiters) settleWaiter(waiter, done)
+                }
+                return Promise.resolve({ value, done: false })
+              }
+              if (statusEnded) return Promise.resolve(done)
+              return new Promise((resolve) => {
+                const waiter: StatusWaiter = { owned, resolve }
+                owned.add(waiter)
+                statusWaiters.add(waiter)
+                observed.statusWaiters = statusWaiters.size
+              })
+            },
             return: (): Promise<IteratorResult<ServerStatus>> => {
-              observed.statusReturnCalls++
+              if (returned) return Promise.resolve(done)
               returned = true
+              observed.statusReturnCalls++
+              for (const waiter of owned) settleWaiter(waiter, done)
               return Promise.resolve(done)
             }
           }
@@ -114,11 +184,9 @@ export const makeFakeConnection = (): Effect.Effect<FakeConnection> =>
       connection,
       observed,
       controls,
-      deliverStatus: (status) => Queue.offerUnsafe(statusQueue, status) ? Effect.void : Effect.void,
-      endStatus: Queue.end(statusQueue),
-      markClosed: Effect.sync(() => {
-        closed = true
-      }),
+      deliverStatus: (status) => Effect.sync(() => deliverStatus(status)),
+      endStatus: Effect.sync(settleStatusEnd),
+      markClosed: Effect.sync(settleClosed),
       statusStarted
     }
   })

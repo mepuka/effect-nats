@@ -2,10 +2,12 @@ import { Context } from "effect"
 import type { Effect } from "effect"
 import type { ConnectIssue } from "./Errors.ts"
 import type { Connection } from "./NatsTransport.ts"
+import type { ReconnectPolicy } from "./ReconnectPolicy.ts"
 
 /** Options handed to the underlying client's connect entry point. */
 export interface ConnectOptions {
   readonly servers: ReadonlyArray<string>
+  readonly reconnect?: ReconnectPolicy | undefined
 }
 
 export interface Interface {

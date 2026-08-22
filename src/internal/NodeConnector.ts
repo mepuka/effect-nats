@@ -6,10 +6,12 @@ import {
   UserAuthenticationExpiredError
 } from "@nats-io/nats-core"
 import { connect } from "@nats-io/transport-node"
+import type { NodeConnectionOptions } from "@nats-io/transport-node"
 import { Effect, Layer } from "effect"
 import { Connector, type Interface } from "./Connector.ts"
 import { ConnectFatalError, type ConnectIssue, ConnectTransientError } from "./Errors.ts"
 import type { Connection } from "./NatsTransport.ts"
+import { compile as compileReconnect, defaultPolicy } from "./ReconnectPolicy.ts"
 
 const codeAt = (value: unknown): string | undefined => {
   if (typeof value !== "object" || value === null) return undefined
@@ -88,11 +90,14 @@ export const classifyConnectCause = (cause: unknown): ConnectIssue => {
  * (Scope ownership; a dial cannot be cancelled, only disowned).
  */
 export const connectorFromDial = (
-  dial: (options: { readonly servers: ReadonlyArray<string> }) => Promise<Connection>
+  dial: (options: NodeConnectionOptions) => Promise<Connection>
 ): Interface => ({
   connect: (options) =>
     Effect.suspend(() => {
-      const pending = dial(options)
+      const pending = dial({
+        servers: [...options.servers],
+        ...compileReconnect(options.reconnect ?? defaultPolicy)
+      })
       return Effect.tryPromise({
         try: () => pending,
         catch: classifyConnectCause
@@ -116,9 +121,7 @@ export const connectorFromDial = (
  * connect entry point. No retries here - supervision belongs to the acquire
  * loop above this seam.
  */
-export const nodeConnector: Interface = connectorFromDial(({ servers }) =>
-  connect({ servers: [...servers] })
-)
+export const nodeConnector: Interface = connectorFromDial((options) => connect(options))
 
 export const layerNodeConnector = Layer.succeed(
   Connector,
