@@ -6,8 +6,16 @@ root export stays empty until an ADR approves the first API surface.
 
 ## Read before changing
 
+- **Open findings:** before planning, implementation, or review, read `TO_FIX.md`. Confirmed items
+  block overlapping work until corrected and reverified; watch items guide inspection but do not
+  authorize unresolved design choices.
 - **Implementation or review:** invoke the repository-local `effect-nats-implementation` skill at
   `.agents/skills/effect-nats-implementation/SKILL.md` and follow its fidelity receipt.
+- **Feature, fix, stream, lifecycle, or integration-test work:** also invoke the repository-local
+  `tdd` skill at `.agents/skills/tdd/SKILL.md` and work in one-seam red/green vertical slices.
+- **Stream, subscription, queue, fiber, readiness, timeout, or concurrency work:** also invoke
+  `.agents/skills/effect4-stream-discipline/SKILL.md` for hardening. Its agent-protocol case studies
+  are methodology, never NATS semantic authority.
 - **Effect code, services, streams, errors, retries, config, or tests:** also read `docs/STYLE.md`.
 - **Protocol, compatibility, Core, KV, or Object Store behavior:** read
   `docs/research/nats-js-reference.md` and the applicable ADR under `docs/architecture/`.
@@ -24,7 +32,8 @@ root export stays empty until an ADR approves the first API surface.
 3. **Scope owns lifetime.** Connections, readers, writers, subscriptions, requests, reconnect
    loops, heartbeats, and drains acquire and finalize within `Scope`. Layers finish acquisition;
    their long-lived fibers use scoped forks.
-4. **Backpressure is explicit.** Every producer/consumer boundary names its capacity and overflow
+4. **Stream handling is the first implementation gate.** Every producer/consumer boundary names
+   its capacity, unit, overflow and terminal ordering, producer suspension authority, and release
    behavior. Public subscriptions expose pull-based `Stream`; private callbacks bridge through a
    bounded `Queue`, `PubSub`, or `SubscriptionRef` chosen for the delivery contract.
 5. **Typed boundaries.** Decode untrusted wire/config/storage values, preserve protocol status and
