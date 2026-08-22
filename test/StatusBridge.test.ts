@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest"
 import { Cause, Effect, Exit, Fiber, Queue, Scope, Stream } from "effect"
-import { make as makeStatusBridge } from "../../src/internal/StatusBridge.ts"
-import { makeFakeConnection, statusOf } from "./kit.ts"
+import { make as makeStatusBridge } from "../src/internal/StatusBridge.ts"
+import { makeFakeConnection, statusOf } from "./Kit.ts"
 
 it.effect("delivers statuses until the server ends the feed, then completes", () =>
   Effect.gen(function*() {

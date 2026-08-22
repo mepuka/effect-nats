@@ -2,9 +2,9 @@ import { expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Queue, Schedule } from "effect"
 import type { Duration, Fiber as FiberT } from "effect"
 import { TestClock } from "effect/testing"
-import { ConnectFatalError, ConnectTransientError } from "../../src/internal/Errors.ts"
-import { layerConnecting, NatsTransport } from "../../src/internal/NatsTransport.ts"
-import { type FakeConnect, makeFakeConnect } from "./kit.ts"
+import { ConnectFatalError, ConnectTransientError } from "../src/internal/Errors.ts"
+import { layerConnecting, NatsTransport } from "../src/internal/NatsTransport.ts"
+import { type FakeConnect, makeFakeConnect } from "./Kit.ts"
 
 const servers = ["nats://localhost:4222"]
 

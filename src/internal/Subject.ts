@@ -3,7 +3,7 @@
  * trailing tokens, and both act only as whole tokens — a `>` or `*` embedded in
  * a longer token is a literal character (server `isValidSubject` semantics).
  */
-export const subjectMatches = (filter: string, subject: string): boolean => {
+export const matches = (filter: string, subject: string): boolean => {
   const filterTokens = filter.split(".")
   const subjectTokens = subject.split(".")
   for (let i = 0; i < filterTokens.length; i++) {

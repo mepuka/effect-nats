@@ -9,7 +9,7 @@
     "lint": "oxlint src test vitest.config.ts",
     "format": "dprint fmt",
     "format:check": "dprint check",
-    "perf": "vitest run test/internal/transport.perf.test.ts",
+    "perf": "vitest run test/Transport.perf.test.ts",
     "leak": "bun scripts/leak-check.ts"
   },
   "dependencies": {

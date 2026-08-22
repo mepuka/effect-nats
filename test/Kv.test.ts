@@ -1,9 +1,9 @@
 import { expect, it } from "@effect/vitest"
 import { Deferred, Effect, Fiber, Option, Queue, Result, Schema, Stream } from "effect"
-import * as Memory from "../src/internal/jetstream/memory.ts"
-import { makeKv } from "../src/internal/kv/kv.ts"
-import type { KvBucket, KvWatchEvent } from "../src/internal/kv/kv.ts"
-import { KvBucketName, KvKey } from "../src/internal/kv/naming.ts"
+import * as Memory from "../src/internal/JetStreamMemory.ts"
+import { makeKv } from "../src/internal/Kv.ts"
+import type { KvBucket, KvWatchEvent } from "../src/internal/Kv.ts"
+import { KvBucketName, KvKey } from "../src/internal/KvNaming.ts"
 
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder()

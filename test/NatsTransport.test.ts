@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { layerTransport, NatsTransport } from "../../src/internal/NatsTransport.ts"
-import { makeFakeConnection } from "./kit.ts"
+import { layerTransport, NatsTransport } from "../src/internal/NatsTransport.ts"
+import { makeFakeConnection } from "./Kit.ts"
 
 it.effect("flush round-trips while the layer is open", () =>
   Effect.gen(function*() {

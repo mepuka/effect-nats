@@ -29,7 +29,7 @@ export interface Interface {
 }
 
 export class NatsTransport extends Context.Service<NatsTransport, Interface>()(
-  "@nats-effect/internal/NatsTransport"
+  "effect-nats/NatsTransport"
 ) {}
 
 /**

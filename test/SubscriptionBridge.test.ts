@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest"
 import { Effect, Fiber, Latch, Stream } from "effect"
-import { make } from "../../src/internal/SubscriptionBridge.ts"
+import { make } from "../src/internal/SubscriptionBridge.ts"
 
 const options = {
   capacity: 2,

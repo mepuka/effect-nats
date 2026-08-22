@@ -4,10 +4,10 @@
  * surfaces. No servers, no wall time.
  */
 import { Cause, Clock, Effect, Layer, Queue } from "effect"
-import type { Interface as ConnectorInterface } from "../../src/internal/Connector.ts"
-import { Connector } from "../../src/internal/Connector.ts"
-import type { ConnectIssue } from "../../src/internal/Errors.ts"
-import type { Connection, ServerStatus } from "../../src/internal/NatsTransport.ts"
+import type { Interface as ConnectorInterface } from "../src/internal/Connector.ts"
+import { Connector } from "../src/internal/Connector.ts"
+import type { ConnectIssue } from "../src/internal/Errors.ts"
+import type { Connection, ServerStatus } from "../src/internal/NatsTransport.ts"
 
 export interface FakeConnectionObserved {
   flushCalls: number

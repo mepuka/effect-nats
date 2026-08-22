@@ -1,15 +1,14 @@
 import { Clock, Effect, Layer, Queue, Semaphore, Stream } from "effect"
-import { subjectMatches } from "./subject.ts"
 import type {
   ConsumeEvent,
   ConsumeOptions,
   PublishOptions,
   StoredMessage,
   StreamConfig
-} from "./substrate.ts"
+} from "./JetStream.ts"
 import {
   ConsumerLagged,
-  JetStreamSubstrate,
+  JetStream,
   NoMessageForSubject,
   rollupHeader,
   RollupNotPermitted,
@@ -18,8 +17,9 @@ import {
   StreamNotFound,
   SubjectNotBound,
   WrongLastSequence
-} from "./substrate.ts"
-import type { ConsumeBuffer } from "./substrate.ts"
+} from "./JetStream.ts"
+import type { ConsumeBuffer } from "./JetStream.ts"
+import * as Subject from "./Subject.ts"
 
 interface Subscriber {
   readonly queue: Queue.Queue<StoredMessage, StreamNotFound | ConsumerLagged>
@@ -35,8 +35,8 @@ interface StreamState {
   readonly subscribers: Set<Subscriber>
 }
 
-export interface MemorySubstrate {
-  readonly service: JetStreamSubstrate["Service"]
+export interface MemoryJetStream {
+  readonly service: JetStream["Service"]
   /** Test diagnostic: live subscription count for the leak-counter pass. */
   readonly subscriberCount: (stream: string) => Effect.Effect<number>
 }
@@ -49,7 +49,7 @@ const sameConfig = (a: StreamConfig, b: StreamConfig): boolean =>
   && a.subjects.every((subject, i) => subject === b.subjects[i])
 
 const matchesAny = (filters: ReadonlyArray<string>, subject: string): boolean =>
-  filters.some((filter) => subjectMatches(filter, subject))
+  filters.some((filter) => Subject.matches(filter, subject))
 
 const lastForSubject = (
   messages: ReadonlyArray<StoredMessage>,
@@ -83,7 +83,7 @@ const selectReplay = (
   }
 }
 
-export const make: Effect.Effect<MemorySubstrate> = Effect.gen(function*() {
+export const make: Effect.Effect<MemoryJetStream> = Effect.gen(function*() {
   const streams = new Map<string, StreamState>()
   // One permit serializes every mutation and subscription registration, so
   // sequence assignment, fan-out order, and snapshot-versus-live boundaries
@@ -98,7 +98,7 @@ export const make: Effect.Effect<MemorySubstrate> = Effect.gen(function*() {
         : Effect.succeed(state)
     })
 
-  const service = JetStreamSubstrate.of({
+  const service = JetStream.of({
     createStream: (config) =>
       Semaphore.withPermit(lock)(Effect.suspend(() => {
         const existing = streams.get(config.name)
@@ -257,7 +257,7 @@ export const make: Effect.Effect<MemorySubstrate> = Effect.gen(function*() {
   }
 })
 
-export const layer: Layer.Layer<JetStreamSubstrate> = Layer.effect(
-  JetStreamSubstrate,
+export const layer: Layer.Layer<JetStream> = Layer.effect(
+  JetStream,
   Effect.map(make, (memory) => memory.service)
 )

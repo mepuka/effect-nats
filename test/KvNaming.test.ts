@@ -10,7 +10,7 @@ import {
   streamForBucket,
   subjectForKey,
   subjectPrefix
-} from "../src/internal/kv/naming.ts"
+} from "../src/internal/KvNaming.ts"
 
 const parseBucket = Schema.decodeUnknownResult(KvBucketName)
 const parseKey = Schema.decodeUnknownResult(KvKey)

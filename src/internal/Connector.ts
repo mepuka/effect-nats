@@ -25,5 +25,5 @@ export interface Interface {
  * everything above stays adapter-free and test-fakeable.
  */
 export class Connector extends Context.Service<Connector, Interface>()(
-  "@nats-effect/internal/Connector"
+  "effect-nats/Connector"
 ) {}

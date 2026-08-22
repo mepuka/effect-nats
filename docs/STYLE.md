@@ -94,3 +94,18 @@ record the server/client commit or released version used as evidence.
 The pinned `4.0.0-rc.111` tree is API authority. General Effect examples that use a different
 release name—such as `Schema.TaggedErrorClass` instead of this pin's `Schema.TaggedError`—must be
 translated and compile-checked before use.
+
+## Module and naming conventions
+
+- One PascalCase module per concern under `src/internal/`, flat: the module name is the service
+  or domain it owns (`NatsTransport.ts`, `JetStream.ts`, `Kv.ts`, `KvNaming.ts`, `Subject.ts`).
+  Implementations of a contract get the contract's name plus a role suffix (`JetStreamMemory.ts`,
+  `JetStreamLive.ts`).
+- Services are `Context.Service` classes named like the module, with ids `effect-nats/<Module>`.
+  Constructors are `make`; layers are `layer` or `layer<Role>`; a class-owned layer is a
+  `static readonly layer`.
+- Helpers exported from a module read as namespaced calls (`Subject.matches`), so exported names
+  never repeat the module name.
+- Test files mirror module names (`test/<Module>.test.ts`); shared test utilities are PascalCase
+  non-test modules (`test/Kit.ts`). Performance suites carry `.perf.test.ts` and are excluded
+  from default runs only via explicit scripts, never hidden.

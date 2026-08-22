@@ -7,8 +7,8 @@ import type {
   StoredMessage,
   StreamNotFound,
   SubjectNotBound
-} from "../jetstream/substrate.ts"
-import { JetStreamSubstrate, rollupHeader, rollupSubject } from "../jetstream/substrate.ts"
+} from "./JetStream.ts"
+import { JetStream, rollupHeader, rollupSubject } from "./JetStream.ts"
 import {
   keyFromSubject,
   KvBucketName,
@@ -17,7 +17,7 @@ import {
   streamForBucket,
   subjectForKey,
   subjectPrefix
-} from "./naming.ts"
+} from "./KvNaming.ts"
 
 // KV materialized view over the JetStream substrate, per kv-slice-scoping.md.
 // Operation identity travels in headers, never in names (research doc): a
@@ -159,7 +159,7 @@ const operationOf = (message: StoredMessage): KvOperation | undefined => {
 
 const emptyPayload = new Uint8Array(0)
 
-export const makeKv = (substrate: JetStreamSubstrate["Service"]): KvService => {
+export const makeKv = (substrate: JetStream["Service"]): KvService => {
   const open: KvService["open"] = (bucket, options) =>
     Effect.gen(function*() {
       const stream = streamForBucket(bucket)
@@ -407,11 +407,11 @@ export const makeKv = (substrate: JetStreamSubstrate["Service"]): KvService => {
   }
 }
 
-export class Kv extends Context.Service<Kv, KvService>()("effect-nats/internal/kv/Kv") {
-  static readonly layer: Layer.Layer<Kv, never, JetStreamSubstrate> = Layer.effect(
+export class Kv extends Context.Service<Kv, KvService>()("effect-nats/Kv") {
+  static readonly layer: Layer.Layer<Kv, never, JetStream> = Layer.effect(
     Kv,
     Effect.gen(function*() {
-      return makeKv(yield* JetStreamSubstrate)
+      return makeKv(yield* JetStream)
     })
   )
 }

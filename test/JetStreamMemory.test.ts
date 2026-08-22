@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest"
 import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
-import * as Memory from "../src/internal/jetstream/memory.ts"
-import type { ConsumeEvent, StoredMessage } from "../src/internal/jetstream/substrate.ts"
+import type { ConsumeEvent, StoredMessage } from "../src/internal/JetStream.ts"
+import * as Memory from "../src/internal/JetStreamMemory.ts"
 
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder()

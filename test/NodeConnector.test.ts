@@ -8,8 +8,8 @@ import {
   UserAuthenticationExpiredError
 } from "@nats-io/nats-core"
 import { Effect } from "effect"
-import type { ConnectFatalError, ConnectTransientError } from "../../src/internal/Errors.ts"
-import { classifyConnectCause, nodeConnector } from "../../src/internal/NodeConnector.ts"
+import type { ConnectFatalError, ConnectTransientError } from "../src/internal/Errors.ts"
+import { classifyConnectCause, nodeConnector } from "../src/internal/NodeConnector.ts"
 
 it("classifies connect-time error classes", () => {
   const auth = classifyConnectCause(new AuthorizationError("authorization violation"))

@@ -9,16 +9,16 @@
  */
 import { expect, it } from "@effect/vitest"
 import { Effect, Fiber, Layer, Stream } from "effect"
-import { Connector } from "../../src/internal/Connector.ts"
+import { Connector } from "../src/internal/Connector.ts"
 import {
   type Connection,
   layerConnecting,
   layerTransport,
   NatsTransport
-} from "../../src/internal/NatsTransport.ts"
-import { nodeConnector } from "../../src/internal/NodeConnector.ts"
-import { make as makeStatusBridge } from "../../src/internal/StatusBridge.ts"
-import { make as makeSubscriptionBridge } from "../../src/internal/SubscriptionBridge.ts"
+} from "../src/internal/NatsTransport.ts"
+import { nodeConnector } from "../src/internal/NodeConnector.ts"
+import { make as makeStatusBridge } from "../src/internal/StatusBridge.ts"
+import { make as makeSubscriptionBridge } from "../src/internal/SubscriptionBridge.ts"
 
 const bun = (globalThis as Record<string, unknown>).Bun as
   | { gc: (force: boolean) => void }

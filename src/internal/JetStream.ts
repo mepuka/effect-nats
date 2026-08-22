@@ -104,7 +104,7 @@ export class ConsumerLagged extends Schema.TaggedError<ConsumerLagged>()("Consum
   lastDeliveredSequence: Schema.BigInt
 }) {}
 
-export class JetStreamSubstrate extends Context.Service<JetStreamSubstrate, {
+export class JetStream extends Context.Service<JetStream, {
   /** Create-only; an existing stream with identical config succeeds (idempotent). */
   createStream(config: StreamConfig): Effect.Effect<void, StreamConfigConflict>
   getStream(name: string): Effect.Effect<StreamConfig, StreamNotFound>
@@ -132,4 +132,4 @@ export class JetStreamSubstrate extends Context.Service<JetStreamSubstrate, {
     stream: string,
     options: ConsumeOptions
   ): Stream.Stream<ConsumeEvent, StreamNotFound | ConsumerLagged>
-}>()("effect-nats/internal/jetstream/JetStreamSubstrate") {}
+}>()("effect-nats/JetStream") {}
