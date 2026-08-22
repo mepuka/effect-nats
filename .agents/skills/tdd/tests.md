@@ -17,7 +17,7 @@ test("user can checkout with valid cart", async () => {
 Characteristics:
 
 - Tests behavior users/callers care about
-- Uses public API only
+- Uses the agreed seam only (package-public or an approved internal boundary), never that seam's internals
 - Survives internal refactors
 - Describes WHAT, not HOW
 - One logical assertion per test

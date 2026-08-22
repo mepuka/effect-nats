@@ -91,14 +91,40 @@ const typedError = yield * Fiber.join(fiber) // flip: error surfaces as success
 
 ## Supervision pattern
 
-Background loops that must never die silently:
+Background loops that must never die silently — classify, bound, and expose
+exhaustion. `Schedule.spaced` has no stop condition, so a bare `spaced` retry
+loops forever over fatal errors (authorization, protocol, configuration) and
+never reports exhaustion:
 
 ```ts
-const restart = Schedule.spaced(restartMs)
-const supervised = <A, E>(loop: Effect.Effect<A, E, never>) =>
-  loop.pipe(Effect.retry(restart), Effect.repeat(restart), Effect.forkScoped)
+// Sanctioned shape: bounded + jittered, classified, observable exhaustion.
+class LoopError extends Data.TaggedError("LoopError")<{
+  readonly reason: "transient" | "fatal"
+}> {}
+
+const restart = Schedule.exponential("200 millis").pipe(
+  Schedule.jittered,
+  Schedule.upTo({ duration: "30 seconds" }) // hard total-duration bound
+)
+
+const supervised = (loop: Effect.Effect<void, LoopError>) =>
+  loop.pipe(
+    // classify: only typed transient reasons retry; fatal variants fall through
+    Effect.retry({ schedule: restart, while: (error) => error.reason === "transient" }),
+    // fatal errors and exhaustion surface here — log, and emit a status event
+    // or fail the loop's status surface where consumers can observe it
+    Effect.catch((error) => Effect.logError("background loop exhausted", error)),
+    Effect.forkScoped
+  )
 ```
 
-`retry` covers failure, `repeat` covers unexpected normal completion, the
-scope covers shutdown. Combine with a success-only readiness `Deferred`
-(case C1/C2) so consumers can await the loop actually being bound.
+Rules: (1) retry only typed transient reasons at the narrowest idempotent
+boundary; (2) always bound with `upTo` or an attempt cap, and jitter;
+(3) exhaustion must be visible — log, metric, or status event — never a
+silent stop; (4) `repeat` for unexpected normal completion only where normal
+completion is actually a fault; (5) continuous reconnect-style looping is
+allowed only through explicit configuration plus an ADR, with observable
+status; (6) prove exact timing, non-retry of fatal reasons, exhaustion,
+schedule reset, interruption, and scope finalization under `TestClock`.
+Combine with a success-only readiness `Deferred` (case C1/C2) so consumers
+can await the loop actually being bound.

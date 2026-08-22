@@ -11,17 +11,17 @@ When exploring the codebase, read `CONTEXT.md` (if it exists) so test names and 
 
 ## What a good test is
 
-Tests verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't. A good test reads like a specification: "user can checkout with valid cart" tells you exactly what capability exists, and it survives refactors because it doesn't care about internal structure.
+Tests verify behavior through agreed interfaces, not implementation details. Code can change entirely; tests shouldn't. A good test reads like a specification: "user can checkout with valid cart" tells you exactly what capability exists, and it survives refactors because it doesn't care about internal structure.
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking guidelines.
 
 ## Seams: where tests go
 
-A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
+A **seam** is an agreed observable boundary you test at: a module interface where you observe behavior without reaching inside. A seam may be a package-public export or an explicitly approved internal capability boundary — for example an internal parser, transport, or bridge module named in the task or an ADR. It is never a private function or an implementation detail. Tests live at seams.
 
-**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user. No test is written at an unconfirmed seam. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
+**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user. No test is written at an unconfirmed seam. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case. In repositories that keep protocol machinery internal until design review (empty public surface), internal capability boundaries are legitimate seams; requiring package-public exports before testing would either block mandated coverage or pressure premature exports.
 
-Ask: "What's the public interface, and which seams should we test?"
+Ask: "What's the observable interface under test, and which seams should we test?"
 
 When the shape of that interface is itself in question (how deep the module is, where the seam belongs, what the interface should expose), call the Skill tool with "codebase-design" for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
 

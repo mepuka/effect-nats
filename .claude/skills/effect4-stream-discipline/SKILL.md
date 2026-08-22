@@ -175,9 +175,10 @@ You are done when ALL of these hold, and not before:
   broken (spot-check by mentally reverting a fix: which test catches it?);
 - every queue/map/fan-out has an explicit bound with tested overflow
   behavior;
-- background loops are supervised (`retry` + `repeat` + `forkScoped`) so
-  neither failure nor completion kills them silently, and their readiness
-  is witnessed, not assumed.
+- background loops are supervised per the api-notes supervision rules —
+  classified, bounded, jittered retry with observable exhaustion; `repeat`
+  only where normal completion is actually a fault; `forkScoped` for
+  shutdown — and their readiness is witnessed, not assumed.
 
 ## The laws (each backed by a case study)
 
@@ -213,11 +214,18 @@ You are done when ALL of these hold, and not before:
    per-message construction. → P3.
 10. **A slow test is a race until proven slow.** Probe and timestamp before
     optimizing or raising timeouts. → P1.
-11. **Never bridge subscriptions through async iterators.** A pending
-    `iter.next()` that only a later finalizer can resolve deadlocks
-    interruption — every timeout and race in the process then hangs. Push
-    into a scoped Queue from a callback instead, and test interruption
-    against the REAL dependency, not just Effect-native fakes. → S6.
+11. **Bridging subscriptions through async iterators requires per-adapter
+    proof, not a blanket rule.** Generic stream cleanup awaits
+    `iterator.return()` while interruption waits on it (the
+    `Channel.fromAsyncIterable` finalizer), so any adapter whose `return()`
+    cannot settle while a pull pends deadlocks interruption — the official
+    NATS.js queued iterator behaves exactly this way until `stop()` resolves
+    its signal, and its `yields` buffer grows without bound. Default to
+    callback-to-bounded-Queue, released LIFO: unsubscribe first, then queue
+    shutdown. If you bridge an iterator anyway, prove against the REAL
+    dependency: a pending-pull interruption completes in bounded time,
+    unsubscribe/`return` runs exactly once, no post-release delivery, and no
+    hidden growable upstream buffer. → S6.
 
 ## When to read the references
 
