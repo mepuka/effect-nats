@@ -26,13 +26,12 @@ Do not manufacture an API from analogy alone.
 
 ## Source precedence
 
-Use sources in this order:
+Apply precedence separately to each kind of claim:
 
-1. the pinned NATS protocol, server, and official client source;
-2. observations from declared server-version conformance tests;
-3. the pinned Effect v4 source tree;
-4. accepted repository ADRs and verified research notes;
-5. third-party clients and examples.
+- Protocol semantics: pinned NATS source > declared conformance observations > official NATS docs.
+- Public API contract: accepted ADR > task requirements within that ADR > analogues.
+- Implementation idiom: pinned Effect source > verified repository research > third-party
+  precedent.
 
 The Effect tree decides implementation style; it does not redefine NATS semantics. The NATS tree
 decides protocol semantics; it does not decide the Effect API shape.
@@ -89,6 +88,10 @@ declared contract and compile it against the exact repository pin.
 - Do not add a public export, service method, error variant, encoded type, runtime promise, or
   compatibility claim without an accepted ADR.
 - Keep experiments under internal modules.
+- Keeping code internal does not authorize choosing externally observable defaults such as
+  capacity, overflow, queued-message disposition, unsubscribe versus drain, or restoration
+  behavior. If the task or an accepted ADR does not fix them, stop before writing a test that
+  encodes the choice.
 - Preserve absence versus empty, Core publish versus JetStream acknowledgement, KV revision
   preconditions, and Object Store metadata/chunk completion.
 
@@ -109,12 +112,24 @@ declared contract and compile it against the exact repository pin.
 ### 3. Backpressure and lifecycle gate
 
 - Name every queue or buffer's capacity, overflow behavior, ownership, and shutdown behavior.
+- A bounded subscription contract states a positive finite capacity, its unit—messages, bytes, or
+  both—the triggering message's disposition, whether already-admitted messages drain or are
+  discarded before the terminal error, and the exact loss diagnostics. `capacity = 0` requires an
+  explicit rendezvous contract.
 - Do not assume `Stream.fromAsyncIterable` bounds an upstream producer.
-- A subscription's finalizer must unsubscribe or drain according to its declared contract.
-- Drain stops admission, waits only for bounded owned work, flushes when meaningful, and has a
-  tested forced-close path.
+- A subscription finalizer unsubscribes or drains according to its declared contract.
+- Subscription release removes the local dispatcher entry first, then emits `UNSUB` when transport
+  state permits, and completes the queue exactly once. It is total, idempotent, and race-safe
+  against explicit unsubscribe, overflow, remote close, and parent interruption. No callback may
+  enqueue after local removal.
+- Core connection drain immediately rejects new subscriptions, drains existing subscriptions,
+  then rejects further publishes, flushes pending outbound commands, and closes. Any wrapper
+  timeout or forced-close policy is explicit.
+- Core `flush` is a PING/PONG round trip for commands sent before that PING on the current
+  connection. It does not prove subscriber processing or recover commands lost during reconnect.
 - Preserve per-subscription ordering unless the API explicitly opts into bounded unordered work.
-- Reconnect may restore transport state; it must not silently strengthen Core delivery semantics.
+- Reconnect performs a fresh handshake and restores subscriptions. In-flight requests fail, and
+  inbound or outbound Core messages may be lost; reconnect must not strengthen delivery semantics.
 
 ### 4. Error and retry gate
 
@@ -123,10 +138,19 @@ declared contract and compile it against the exact repository pin.
 - Keep configuration, transport, protocol, authorization, timeout, no-responder, JetStream API,
   KV conflict, and object-integrity errors distinct when callers can recover differently.
 - Retry at the narrowest idempotent boundary with an operation-specific `Schedule`.
-- Never retry Core publish as though it were exactly-once. Publish retry requires an explicit
-  duplicate-risk policy or stable server-supported deduplication identity.
-- KV mutation retry must preserve its expected revision. Object transfer retry must preserve
-  chunk, metadata, and digest invariants.
+- Never retry Core publish as though it were exactly-once. Core has no deduplication identity;
+  server-supported deduplication applies only to JetStream publish. A retry requires an explicit
+  duplicate-risk policy.
+- A Core request is a publish with a reply inbox. Timeout or cancellation stops waiting, not
+  responder execution; retry can invoke responders again.
+- A KV retry retains the original expected revision and surfaces timeout-after-possible-commit as
+  indeterminate. A subsequent revision conflict does not prove the first attempt failed.
+- Object chunks may be PubAcked before metadata commits. Publish metadata only after consuming the
+  full input and computing its digest; pre-metadata failure or interruption attempts chunk cleanup.
+  Once metadata commits, the replacement is live, and failure to purge old chunks must not convert
+  that committed success into failure. A get succeeds only after full consumption and digest
+  verification; early cancellation is not verified success. Whole-object retry after uncertain
+  metadata commit requires previous-revision protection or reconciliation.
 
 ### 5. Test gate
 
@@ -163,6 +187,9 @@ declared contract and compile it against the exact repository pin.
    - tests run and server versions observed;
    - assumptions, untested claims, and remaining risks.
 
+On a stop condition, produce a blocked-task receipt instead: the requested contract, authorities
+inspected, missing decision, and confirmation that no tests or implementation were added.
+
 ## Stop conditions
 
 Stop and request a design decision when:
@@ -170,6 +197,8 @@ Stop and request a design decision when:
 - no accepted ADR permits the requested public contract;
 - NATS and Effect analogues imply incompatible semantics;
 - queue capacity or overflow behavior is unknowable from the contract;
+- the unresolved wrap/fork/wire or callback/async-iterator choice changes whether the producer can
+  suspend or where buffering occurs;
 - retry safety depends on an unstated idempotency guarantee;
 - a server-dependent claim cannot be tested against a declared version;
 - implementing the slice would require broad unsafe casts, detached work, or swallowed defects.

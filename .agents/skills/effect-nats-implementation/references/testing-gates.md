@@ -39,21 +39,35 @@ Cover:
 - connect, INFO, auth, CONNECT, PING/PONG, and first usable state;
 - server error before and after readiness;
 - request success, timeout, no responders, cancellation, and late reply cleanup;
+- request timeout/cancellation stopping only the wait, plus duplicate responder invocation risk on
+  retry;
 - subscription ordering, unsubscribe limits, slow consumer policy, and finalization;
-- flush as a protocol round trip rather than an alias for local enqueue;
-- drain admission stop, bounded completion, timeout, and forced close;
-- reconnect attempt scheduling, exhaustion, state restoration, and interruption;
+- one `SUB` per stream run and exactly one `UNSUB` after `take`, failure, interruption, overflow,
+  and unsubscribe/interruption races;
+- no post-release delivery, no latent blocked offer, and the documented ordering between admitted
+  messages and `SlowConsumerError`;
+- flush as a current-connection PING/PONG barrier for commands sent before its PING, without
+  claiming subscriber processing or reconnect recovery;
+- drain rejecting new subscriptions, draining existing subscriptions, then rejecting publishes,
+  flushing pending outbound commands, and closing;
+- explicit wrapper timeout/forced-close behavior around drain;
+- reconnect attempt scheduling, exhaustion, fresh handshake, subscription restoration, in-flight
+  request failure, Core message-loss exposure, and interruption;
 - Core publish uncertainty across disconnect without claiming acknowledgement.
 
 ## KV tests
 
 Cover:
 
-- create, put, get, delete, purge, and missing key behavior;
-- compare-and-set success and revision conflict without weakening the expected revision;
-- tombstone and purge-marker interpretation;
-- watch initial synchronization, updates, deletion, cancellation, and reconnect;
-- history and TTL behavior against declared server versions;
+- create, put, get, delete, purge, true absence, and empty payload behavior;
+- compare-and-set success, revision conflict, and timeout-after-possible-commit uncertainty without
+  weakening the expected revision;
+- returned `DEL` and `PURGE` entry interpretation;
+- last-value, all-history, and updates-only watch modes;
+- `isUpdate`, resume revision, cancellation, reconnect, and an empty bucket producing no synthetic
+  initialization event;
+- history and TTL removal of values or markers without requiring another watch notification,
+  observed against declared server versions;
 - bucket naming/config decoding and JetStream API failures.
 
 The first-party Effect `KeyValueStore` is only a service/error-shape analogue. It cannot prove NATS
@@ -64,11 +78,15 @@ KV watch, revision, history, or tombstone semantics.
 Cover:
 
 - empty, single-chunk, multi-chunk, and boundary-sized objects;
-- metadata publication only after the chunk contract completes;
+- PubAcked chunks followed by pre-metadata failure/interruption and attempted chunk cleanup;
+- metadata publication only after full input consumption and digest computation;
+- metadata commit making the replacement live even if old-chunk purge subsequently fails;
 - digest computation and verification;
-- missing chunks, wrong digest, partial upload, interruption, and cleanup;
+- missing chunks, wrong digest, partial upload, interruption, cleanup, and early read cancellation
+  without verified-success reporting;
 - replacement, deletion, links, metadata update, and watch behavior if exposed;
-- reconnect and retry at each permitted boundary without duplicating committed metadata;
+- reconnect and retry at each permitted boundary, including reconciliation or previous-revision
+  protection after uncertain metadata commit;
 - streaming without assembling the whole object in memory.
 
 ## Integration matrix receipt

@@ -25,4 +25,5 @@ pnpm format:check
 ```
 
 Start with `AGENTS.md`. Research and unresolved architecture decisions live under `docs/`; public
-API implementation waits for the initial contract review.
+API implementation waits for the initial contract review. Implementation and review tasks use the
+repository-local `effect-nats-implementation` skill under `.agents/skills/`.

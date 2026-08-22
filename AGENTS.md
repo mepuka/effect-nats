@@ -6,7 +6,9 @@ root export stays empty until an ADR approves the first API surface.
 
 ## Read before changing
 
-- **Effect code, services, streams, errors, retries, config, or tests:** read `docs/STYLE.md`.
+- **Implementation or review:** invoke the repository-local `effect-nats-implementation` skill at
+  `.agents/skills/effect-nats-implementation/SKILL.md` and follow its fidelity receipt.
+- **Effect code, services, streams, errors, retries, config, or tests:** also read `docs/STYLE.md`.
 - **Protocol, compatibility, Core, KV, or Object Store behavior:** read
   `docs/research/nats-js-reference.md` and the applicable ADR under `docs/architecture/`.
 - **Third-party precedent:** read `docs/research/ecosystem-survey.md`; treat it as comparison
