@@ -9,9 +9,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # This is a reproducible conformance pin, not a claimed support floor.
+  NATS_SERVER_VERSION: v2.14.5
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -24,6 +33,20 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Install pinned native nats-server
+        uses: aricart/install-binary@ea21a65da24c871c1cb40b1e0b6e3b3db8252f2b # v2.0.0
+        with:
+          repo: nats-io/nats-server
+          tag: ${{ env.NATS_SERVER_VERSION }}
+          name: nats-server
+          cache: true
+
+      - name: Record toolchain receipt
+        run: |
+          node --version
+          pnpm --version
+          nats-server --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

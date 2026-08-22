@@ -1,0 +1,74 @@
+name: NATS upstream canary
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # NATS releases are infrequent; a daily run keeps detection latency below 24 hours.
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nats-upstream-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  latest:
+    name: Latest stable NATS.js and nats-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install latest stable native nats-server
+        uses: aricart/install-binary@ea21a65da24c871c1cb40b1e0b6e3b3db8252f2b # v2.0.0
+        with:
+          repo: nats-io/nats-server
+          tag: latest
+          name: nats-server
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Move declared NATS.js packages to the latest npm release
+        run: pnpm update --latest "@nats-io/*"
+
+      - name: Type-check against upstream latest
+        run: pnpm check
+
+      - name: Test against upstream latest
+        run: pnpm test
+
+      - name: Record upstream compatibility receipt
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## NATS upstream canary receipt"
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Node: \`$(node --version)\`"
+            echo "- pnpm: \`$(pnpm --version)\`"
+            echo "- nats-server: \`$(nats-server --version 2>&1 || echo unavailable)\`"
+            echo
+            echo "### Declared NATS.js packages"
+            echo
+            echo '```text'
+            pnpm list --depth 0 | grep '@nats-io/' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

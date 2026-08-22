@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Chicago
+    allow:
+      - dependency-name: "@nats-io/*"
+    groups:
+      nats-js:
+        patterns:
+          - "@nats-io/*"
+    versioning-strategy: increase-if-necessary
+    commit-message:
+      prefix: "deps(nats)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: America/Chicago
+    commit-message:
+      prefix: "ci"

@@ -27,3 +27,6 @@ pnpm format:check
 Start with `AGENTS.md`. Research and unresolved architecture decisions live under `docs/`; public
 API implementation waits for the initial contract review. Implementation and review tasks use the
 repository-local `effect-nats-implementation` skill under `.agents/skills/`.
+
+Required CI uses a pinned native NATS server while a daily canary follows the latest stable NATS.js
+packages and `nats-server`. See [upstream compatibility CI](docs/UPSTREAM_COMPATIBILITY.md).
