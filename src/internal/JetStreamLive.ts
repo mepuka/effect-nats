@@ -224,16 +224,6 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
       consume: (stream, options: ConsumeOptions) =>
         Stream.unwrap(
           Effect.gen(function*() {
-            if (options.buffer._tag === "PullWindow") {
-              // Genuine live pull-window control arrives with the pull-consumer
-              // slice (ADR-0005); offering suspension semantics we cannot
-              // honor against a real server would be the lie ADR-0005 bans.
-              return yield* Effect.die(
-                new Error(
-                  "PullWindow is not implemented for the live adapter yet; use TerminateOnLag"
-                )
-              )
-            }
             const capacity = options.buffer.messages
             const start = options.start
             // Explicit ephemeral consumer: `add` resolving is the real
@@ -272,6 +262,66 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               return yield* new StreamNotFound({ stream })
             }
             const consumer = gotten.value
+            const entryOf = (
+              message: JsMsg
+            ): { readonly _tag: "Entry"; readonly message: StoredMessage } => ({
+              _tag: "Entry",
+              message: {
+                subject: message.subject,
+                sequence: toSequence(message.info.streamSequence, "consume streamSequence"),
+                payload: message.data,
+                headers: fromMsgHdrs(message.headers),
+                timestampMillis: message.time.getTime()
+              }
+            })
+            if (options.buffer._tag === "PullWindow") {
+              // ADR-0005 pull window: the queue bound is the whole window. The
+              // loop requests one message per `next()` and `Queue.offer`
+              // suspends while the window is full, so the server is never
+              // asked for more than the consumer can hold; publishers are
+              // never suspended — the stream absorbs the backlog.
+              const queue = yield* Effect.acquireRelease(
+                Queue.bounded<ConsumeEvent, StreamNotFound>(capacity),
+                (q) => Queue.shutdown(q)
+              )
+              const caughtUpEvent: ConsumeEvent = { _tag: "CaughtUp" }
+              const pullLoop = Effect.gen(function*() {
+                let caughtUp = info.num_pending === 0
+                if (caughtUp) yield* Queue.offer(queue, caughtUpEvent)
+                while (true) {
+                  const next = yield* attempt(() => consumer.next({ expires: 5_000 }))
+                  if (next._tag === "err") {
+                    // a terminal pull status (consumer or stream deleted)
+                    // rejects `next`
+                    yield* Queue.failCause(queue, Cause.fail(new StreamNotFound({ stream })))
+                    return
+                  }
+                  const message = next.value
+                  if (message === null) {
+                    // idle expiry delivers nothing: probe the consumer so a
+                    // silently vanished stream still terminates typed, and so
+                    // history pruned before delivery still yields CaughtUp
+                    const probe = yield* attempt(() => jsm.consumers.info(stream, info.name))
+                    if (probe._tag === "err") {
+                      yield* Queue.failCause(queue, Cause.fail(new StreamNotFound({ stream })))
+                      return
+                    }
+                    if (!caughtUp && probe.value.num_pending === 0) {
+                      caughtUp = true
+                      yield* Queue.offer(queue, caughtUpEvent)
+                    }
+                    continue
+                  }
+                  yield* Queue.offer(queue, entryOf(message))
+                  if (!caughtUp && message.info.pending === 0) {
+                    caughtUp = true
+                    yield* Queue.offer(queue, caughtUpEvent)
+                  }
+                }
+              })
+              yield* Effect.forkScoped(pullLoop, { startImmediately: true })
+              return Stream.fromQueue(queue)
+            }
             const queue = yield* Effect.acquireRelease(
               Queue.bounded<ConsumeEvent, StreamNotFound | ConsumerLagged>(capacity + 1),
               (q) => Queue.shutdown(q)
@@ -281,16 +331,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
             if (caughtUp) Queue.offerUnsafe(queue, { _tag: "CaughtUp" })
             let stop = () => {}
             const callback = (message: JsMsg) => {
-              const entry: ConsumeEvent = {
-                _tag: "Entry",
-                message: {
-                  subject: message.subject,
-                  sequence: toSequence(message.info.streamSequence, "consume streamSequence"),
-                  payload: message.data,
-                  headers: fromMsgHdrs(message.headers),
-                  timestampMillis: message.time.getTime()
-                }
-              }
+              const entry = entryOf(message)
               const admitted = Queue.sizeUnsafe(queue) < capacity && Queue.offerUnsafe(queue, entry)
               if (!admitted) {
                 Queue.failCauseUnsafe(

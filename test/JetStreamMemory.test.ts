@@ -17,8 +17,9 @@ const kvConfig = (bucket: string) => ({
 conformance("memory", (f) => Effect.flatMap(Memory.make, (memory) => f(memory.service)))
 
 // Memory-only observations below: the diagnostic subscriber counter and the
-// PullWindow suspension contract (live PullWindow arrives with the
-// pull-consumer slice, ADR-0005).
+// publisher-suspension face of PullWindow — on this interpreter the publisher
+// IS the producer, so a full window suspends the publish itself, which the
+// live adapter must never do (its live-only test proves the opposite face).
 
 const pump = <E>(events: Stream.Stream<ConsumeEvent, E>) =>
   Effect.gen(function*() {

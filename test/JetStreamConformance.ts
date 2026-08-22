@@ -274,6 +274,59 @@ export const conformance = (label: string, withService: WithService, timeout = 2
   )
 
   its(
+    "a PullWindow buffer replays through a tiny window without loss, then continues live",
+    (service) =>
+      Effect.gen(function*() {
+        yield* service.createStream(kvConfig("b"))
+        // all publishes land before the subscription exists, so the window
+        // paces only the replay: identical observable behavior on both
+        // interpreters even though live pulls and memory snapshots
+        yield* Effect.forEach(
+          [1, 2, 3, 4, 5, 6, 7, 8],
+          (n) => service.publish("KV_b", "$KV.b.k", utf8.encode(`v${n}`)),
+          { discard: true }
+        )
+        const { fiber, queue } = yield* pump(
+          service.consume("KV_b", {
+            filters: ["$KV.b.>"],
+            start: { _tag: "AllHistory" },
+            buffer: { _tag: "PullWindow", messages: 2 }
+          })
+        )
+        const replayed: Array<string> = []
+        for (let i = 0; i < 8; i++) {
+          const event = yield* Queue.take(queue)
+          if (event._tag === "Entry") replayed.push(text(event.message))
+        }
+        expect(replayed).toEqual(["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"])
+        expect((yield* Queue.take(queue))._tag).toBe("CaughtUp")
+        yield* service.publish("KV_b", "$KV.b.k", utf8.encode("live"))
+        const live = yield* Queue.take(queue)
+        expect(live._tag === "Entry" && text(live.message)).toBe("live")
+        yield* Fiber.interrupt(fiber)
+      })
+  )
+
+  its(
+    "deleting a stream fails an active PullWindow consumer with StreamNotFound",
+    (service) =>
+      Effect.gen(function*() {
+        yield* service.createStream(kvConfig("b"))
+        const { fiber, queue } = yield* pump(
+          service.consume("KV_b", {
+            filters: ["$KV.b.>"],
+            start: { _tag: "NewOnly" },
+            buffer: { _tag: "PullWindow", messages: 4 }
+          })
+        )
+        expect((yield* Queue.take(queue))._tag).toBe("CaughtUp")
+        yield* service.deleteStream("KV_b")
+        const exit = yield* Effect.flip(Fiber.join(fiber))
+        expect(exit._tag).toBe("StreamNotFound")
+      })
+  )
+
+  its(
     "a TerminateOnLag buffer fails the lagging subscription typed, sparing the publisher",
     (service) =>
       Effect.gen(function*() {
