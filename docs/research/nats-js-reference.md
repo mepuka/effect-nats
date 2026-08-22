@@ -132,7 +132,12 @@ Every resource test should prove finalizers ran: connection drained/closed, subs
 
 **Fact.** Upstream contribution policy asks for an issue before functional changes, regression/feature tests, minimal dependencies, DCO sign-off, and consideration of Orbit for utilities. [change/test/dependency policy, lines 22–62](https://github.com/nats-io/nats.js/blob/3a7b736b175d9a387130210c88f851d71e1b014f/CONTRIBUTING.md#L22-L62), [DCO sign-off, lines 64–76](https://github.com/nats-io/nats.js/blob/3a7b736b175d9a387130210c88f851d71e1b014f/CONTRIBUTING.md#L64-L76)
 
-**Recommendation.** Our first release can target Node/TypeScript and pnpm, but public docs must not imply Deno/Bun/browser support until CI exercises those runtimes. Keep Effect and Schema as peer dependencies where feasible, publish provenance, generate API docs, and make package exports explicit. If “official NATS client” means NATS-project ownership or endorsement, treat that as governance work requiring an upstream proposal; technical compatibility alone does not confer official status.
+**Recommendation.** Our first release can target Bun/TypeScript, but public docs must not imply
+Node/Deno/browser support until CI exercises those runtimes. Keep Effect and Schema as peer
+dependencies where feasible, publish provenance, generate API docs, and make package exports
+explicit. If “official NATS client” means NATS-project ownership or endorsement, treat that as
+governance work requiring an upstream proposal; technical compatibility alone does not confer
+official status.
 
 ## Reusable design patterns for the Effect-native draft
 

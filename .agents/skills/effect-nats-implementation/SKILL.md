@@ -179,10 +179,10 @@ alone.
 5. Run:
 
    ```text
-   pnpm format:check
-   pnpm lint
-   pnpm check
-   pnpm test
+   bun run format:check
+   bun run lint
+   bun run check
+   bun run test
    ```
 
 6. Run the applicable NATS integration/conformance suite when server semantics are involved.

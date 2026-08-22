@@ -62,7 +62,7 @@ export const make = <A>(options: {
       if (Option.isNone(entry)) {
         yield* nats
           .kvPut(options.key, 0, encode(options.initialValue))
-          .pipe(Effect.catchTag("effect-nats-jetstream/KvConflict", () => Effect.void)) // someone else created it
+          .pipe(Effect.catchTag("effect-nats-agents/KvConflict", () => Effect.void)) // someone else created it
       }
     })
 
@@ -80,7 +80,7 @@ export const make = <A>(options: {
       // CAS retry: on conflict, re-read fresh state and try again
       const loop = (): Effect.Effect<A> =>
         attempt.pipe(
-          Effect.catchTag("effect-nats-jetstream/KvConflict", () => loop()),
+          Effect.catchTag("effect-nats-agents/KvConflict", () => loop()),
           Effect.tap(() => reactivity.invalidate([options.key])),
         )
       return loop()

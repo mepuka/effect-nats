@@ -1,0 +1,21 @@
+[install]
+linker = "isolated"
+minimumReleaseAge = 86400
+minimumReleaseAgeExcludes = [
+  "dprint",
+  "@dprint/android-arm64",
+  "@dprint/android-x64",
+  "@dprint/darwin-arm64",
+  "@dprint/darwin-x64",
+  "@dprint/linux-arm64-glibc",
+  "@dprint/linux-arm64-musl",
+  "@dprint/linux-loong64-glibc",
+  "@dprint/linux-loong64-musl",
+  "@dprint/linux-ppc64-glibc",
+  "@dprint/linux-ppc64-musl",
+  "@dprint/linux-riscv64-glibc",
+  "@dprint/linux-x64-glibc",
+  "@dprint/linux-x64-musl",
+  "@dprint/win32-arm64",
+  "@dprint/win32-x64",
+]

@@ -1,4 +1,7 @@
-# Engineering contract
+# Agent Protocol engineering contract
+
+The root `AGENTS.md` applies first. This file adds the rules specific to
+`packages/agents`.
 
 This repository implements the Synadia Agent Protocol v0.3 on NATS with
 `effect@4.0.0-rc.111`. Correct wire behavior comes before convenience or API
@@ -11,9 +14,8 @@ higher one.
 
 1. `docs/upstream/core-protocol-v0.3.0.md` is the vendored wire contract.
 2. `docs/01-SPEC.md` contains additive project requirements.
-3. `node_modules/effect/src` is authoritative for the pinned Effect API.
-4. `C:\Users\kokok\Dev\Foldable` is read-only reference material for NATS,
-   Effect, and distributed-system patterns; verify a pattern before adapting it.
+3. The workspace-installed `effect/src` is authoritative for the pinned Effect API.
+4. Root research is comparison evidence only; verify a pattern before adapting it.
 
 Before changing protocol, discovery, heartbeat, streaming, errors, or wire
 schemas, read the affected upstream sections and
@@ -90,7 +92,8 @@ For each affected ID:
    conformance test is skipped/todo, or only example tests exist.
 
 Required gates are: vendored-spec integrity, catalog extraction/traceability,
-all conformance tests, `bun test`, and `bun run typecheck`. A full-protocol
-completion claim requires zero unmapped requirements, no accidental Agent SDK
-dependency, and a real NATS integration run. Record justified deviations next
-to their requirement IDs rather than weakening a test.
+all conformance tests, `bun run test:agents`, and `bun run check:agents` from the
+monorepo root. A full-protocol completion claim requires zero unmapped
+requirements, no accidental Agent SDK dependency, and a real NATS integration
+run. Record justified deviations next to their requirement IDs rather than
+weakening a test.

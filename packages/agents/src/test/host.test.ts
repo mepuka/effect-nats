@@ -12,7 +12,7 @@ import { AgentClient, layerClient } from "../agents/client.js"
 import { AgentHost, layerHost, type AgentHostConfig } from "../agents/host.js"
 import { classify } from "../agents/prompt-engine.js"
 import { wellFormed, type Frame } from "../agents/protocol/chunks.js"
-import { Wire, type ReplyMessage } from "../agents/wire.js"
+import { Wire } from "../agents/wire.js"
 import { makeLoopbackBus, msg, type LoopbackBus } from "./kit.js"
 
 const forkNow = <A, E>(effect: Effect.Effect<A, E>) =>

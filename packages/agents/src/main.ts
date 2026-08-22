@@ -3,7 +3,7 @@
  * A cell is one schema-typed KV message; updates are CAS'd and invalidate
  * reactively. This is the whole user-facing surface.
  */
-import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { make as makeCell } from "./reactive/cell.js"
 import { Nats } from "./nats/service.js"

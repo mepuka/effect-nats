@@ -2,7 +2,7 @@
  * FastCheck property gates for the P0 laws (docs/CODEX review conformance
  * gate items 2–3). Reproducible: every run prints its seed on failure.
  */
-import { describe, expect, test } from "bun:test"
+import { describe, test } from "bun:test"
 import { FastCheck as fc } from "effect/testing"
 import {
   encodeRequest,

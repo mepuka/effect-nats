@@ -3,17 +3,24 @@
 [![CI](https://github.com/mepuka/effect-nats/actions/workflows/ci.yml/badge.svg)](https://github.com/mepuka/effect-nats/actions/workflows/ci.yml)
 [![NATS upstream canary](https://github.com/mepuka/effect-nats/actions/workflows/nats-upstream-canary.yml/badge.svg)](https://github.com/mepuka/effect-nats/actions/workflows/nats-upstream-canary.yml)
 
-An Effect v4-native TypeScript client for NATS Core, Key/Value, and Object Store, built over the
-official `@nats-io/*` packages behind adapter-neutral internal seams.
+An Effect v4 and Bun monorepo for NATS infrastructure and agent workflows.
 
-> **Status:** active pre-release implementation. Core lifecycle, subscriptions, reconnect, the
-> JetStream substrate, and KV are implemented internally. Object Store is in design. The package
-> root deliberately exports nothing until the contracts and conformance gates are ready for public
-> review.
+> **Status:** active pre-release implementation. Neither package has a released public API, and
+> this project is not endorsed by the NATS or Synadia projects.
 
-This project is not yet released or endorsed by the NATS project.
+## Workspace
 
-## Progress
+- **`effect-nats` (repository root, principal package):** an Effect-native client layer over the official
+  `@nats-io/*` packages, covering Core lifecycle and subscriptions plus the JetStream primitives
+  required by Key/Value and Object Store.
+- **[`effect-nats-agents`](packages/agents/README.md) subsystem:** a typed caller and host implementation of
+  Synadia Agent Protocol v0.3, with a vendored protocol, machine-checked requirement ledger,
+  deterministic state-machine tests, and native-broker integration.
+
+Both packages pin `effect@4.0.0-rc.111`, install through one root `bun.lock`, and run from the same
+CI toolchain.
+
+## NATS client progress
 
 - **Connection lifecycle — internal implementation.** Scope-owned official connection, typed
   initial-connect failures and retry supervision, reconnect-option compilation, observable drain,
@@ -42,7 +49,23 @@ The accepted decisions and active workbenches are indexed in the
 [architecture workbench](docs/architecture/README.md). Confirmed review findings and proof gaps are
 kept in [TO_FIX.md](TO_FIX.md).
 
-## Conformance progress
+## Agent Protocol progress
+
+The package under `packages/agents` implements both sides of the v0.3 wire contract:
+
+- discovery, protocol-version filtering, heartbeat liveness, query replies, and interruptible
+  streamed prompts for callers;
+- ack-first response streams, exactly-one terminators, typed service errors, bounded admission,
+  queue-group hosting, heartbeats, and `$SRV` responders for hosts;
+- total request and chunk decoding with unknown extension preservation; and
+- a strict conformance catalog in which every extracted normative stipulation is classified and
+  backed by executable evidence or marked informative.
+
+Its Bun suite includes property tests, reply-DFA model checks, virtual-time lifecycle tests,
+bounded-memory checks, and native-server cases for round trips, 400/429/503 outcomes, inactivity
+timeouts, heartbeat liveness, cancellation, and queue-group balancing.
+
+## Client conformance progress
 
 Conformance is layered so a passing fake cannot substitute for server-observable behavior:
 
@@ -74,14 +97,17 @@ delivery or durability guarantee.
 ## Development
 
 ```text
-pnpm install
-pnpm check
-pnpm test
-pnpm lint
-pnpm format:check
+bun install
+bun run format:check
+bun run lint
+bun run check
+bun run test
 ```
 
-Live integration tests spawn a native `nats-server`; Docker is not required. Start with
-[`AGENTS.md`](AGENTS.md) before changing contracts or implementation. The repository-local
-implementation and testing skills define the required Effect style, source-fidelity receipt, and
-test gates.
+`bun run check` and `bun run test` cover both workspace packages. Package-specific commands are
+available as `check:client`, `check:agents`, `test:client`, and `test:agents`. Live integration
+tests spawn a native `nats-server`; Docker is not required.
+
+Start with [`AGENTS.md`](AGENTS.md) before changing contracts or implementation, then read the
+nearest package instructions. Repository-local skills define the required Effect style,
+source-fidelity receipt, and testing gates.

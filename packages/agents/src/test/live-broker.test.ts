@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { connect as netConnect } from "node:net"
-import { Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { AgentClient, layerClient } from "../agents/client.js"
 import { layerHost, type AgentHostConfig } from "../agents/host.js"
 import { NatsConnection } from "../agents/nats-connection.js"

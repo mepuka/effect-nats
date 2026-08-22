@@ -27,8 +27,8 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Required correction: choose one internal constructor name, update implementation, tests and
     comments atomically, format the file, and retain the structural `Connection` rename only if its
     callers agree.
-  - Proof/test gate: on the exact merged tree run `pnpm format:check`, `pnpm lint`, `pnpm check`, and
-    `pnpm test`; all must pass in CI. Add a compile-time import test if the constructor remains a
+  - Proof/test gate: on the exact merged tree run `bun run format:check`, `bun run lint`,
+    `bun run check`, and `bun run test`; all must pass in CI. Add a compile-time import test if the constructor remains a
     named internal seam.
 
 - [ ] `docs/architecture/adr-0004-revision-representation.md:8-14,18-20` — converting the official

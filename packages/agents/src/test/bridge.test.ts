@@ -5,7 +5,6 @@
  * (not proof of) TS ⟷ Lean conformance.
  */
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import { TestSchema } from "effect/testing"
 import { UserCreated, DeviceEvent, type UserCreated as User } from "../schema/messages.js"
 import { encodeWire, decodeWire } from "../schema/wire.js"

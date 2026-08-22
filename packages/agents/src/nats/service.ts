@@ -26,13 +26,13 @@ import type { Guarantee } from "./grade.js"
 import type { Subject } from "../core/subjects.js"
 
 export class PublishError extends Schema.TaggedError<PublishError>()(
-  "effect-nats-jetstream/PublishError",
+  "effect-nats-agents/PublishError",
   { subject: Schema.String },
 ) {}
 
 /** CAS failure: someone else wrote `key` between our read and write. */
 export class KvConflict extends Schema.TaggedError<KvConflict>()(
-  "effect-nats-jetstream/KvConflict",
+  "effect-nats-agents/KvConflict",
   {
     key: Schema.String,
     expectedRevision: Schema.Number,
@@ -60,7 +60,7 @@ export interface ServerModel {
   readonly seen: readonly string[]
 }
 
-export class Nats extends Context.Service<Nats, NatsShape>()("effect-nats-jetstream/Nats") {
+export class Nats extends Context.Service<Nats, NatsShape>()("effect-nats-agents/Nats") {
   static readonly layer: Layer.Layer<Nats> = Layer.effect(Nats)(
     Effect.gen(function* () {
       const state = yield* SynchronizedRef.make<ServerModel>({

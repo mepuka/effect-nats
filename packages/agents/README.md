@@ -1,4 +1,4 @@
-# effect-nats-jetstream
+# effect-nats-agents
 
 An [Effect](https://effect.website)-native implementation of the
 [Synadia Agent Protocol for NATS](docs/upstream/core-protocol-v0.3.0.md)
@@ -54,10 +54,12 @@ docs/conformance/      requirement catalog driving the strict gate
 
 ## Developing
 
+From the monorepo root:
+
 ```bash
 bun install
-bun test           # full suite, including the conformance gate
-bun run typecheck
+bun run check:agents
+bun run test:agents # full suite, including the conformance gate
 ```
 
 Pinned to `effect@4.0.0-rc.111`; the installed package source is authoritative
@@ -71,4 +73,5 @@ independent implementation.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE). The package is maintained as the Agents subsystem in the
+[`mepuka/effect-nats`](https://github.com/mepuka/effect-nats) monorepo.

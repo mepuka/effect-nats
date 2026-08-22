@@ -2,13 +2,19 @@
   "name": "effect-nats",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.19.0",
+  "packageManager": "bun@1.3.14",
+  "workspaces": ["packages/*"],
   "scripts": {
-    "check": "node scripts/check.mjs",
-    "test": "vitest run",
-    "lint": "oxlint src test vitest.config.ts",
+    "check": "bun run check:client && bun run check:agents",
+    "check:client": "bun scripts/check.mjs",
+    "check:agents": "bun run --filter effect-nats-agents typecheck",
+    "test": "bun run test:client && bun run test:agents",
+    "test:client": "vitest run",
+    "test:agents": "bun run --filter effect-nats-agents test",
+    "lint": "oxlint src test vitest.config.ts packages/agents/src",
     "format": "dprint fmt",
     "format:check": "dprint check",
+    "verify": "bun run format:check && bun run lint && bun run check && bun run test",
     "perf": "vitest run test/Transport.perf.test.ts",
     "leak": "bun scripts/leak-check.ts"
   },
@@ -26,5 +32,6 @@
     "oxlint": "1.79.0",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
-  }
+  },
+  "trustedDependencies": ["dprint"]
 }

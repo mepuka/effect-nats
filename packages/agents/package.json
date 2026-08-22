@@ -1,5 +1,5 @@
 {
-  "name": "effect-nats-jetstream",
+  "name": "effect-nats-agents",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,8 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mepuka/effect-nats-jetstream.git"
+    "url": "https://github.com/mepuka/effect-nats.git",
+    "directory": "packages/agents"
   },
   "scripts": {
     "dev": "bun run src/main.ts",

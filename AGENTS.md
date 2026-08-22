@@ -1,14 +1,21 @@
-# NATS Effect — repository rules
+# effect-nats — monorepo rules
 
-This repository develops an Effect v4-native TypeScript client for NATS Core and the JetStream
-primitives required by Key/Value and Object Store. The public contract is under design; the current
-root export stays empty until an ADR approves the first API surface.
+This Bun workspace develops the principal Effect v4 NATS client and one subsystem:
+
+- the root `effect-nats` client for NATS Core and the JetStream primitives required by Key/Value
+  and Object Store; and
+- `packages/agents`, the `effect-nats-agents` subsystem implementing Synadia Agent Protocol v0.3.
+
+The client public contract is under design; its root export stays empty until an ADR approves the
+first API surface. Agent-protocol work also reads `packages/agents/AGENTS.md`.
 
 ## Read before changing
 
-- **Open findings:** before planning, implementation, or review, read `TO_FIX.md`. Confirmed items
-  block overlapping work until corrected and reverified; watch items guide inspection but do not
-  authorize unresolved design choices.
+- **Client findings:** before client planning, implementation, or review, read `TO_FIX.md`.
+  Confirmed items block overlapping work until corrected and reverified; watch items guide
+  inspection but do not authorize unresolved design choices.
+- **Agent Protocol:** before changing `packages/agents`, read its `AGENTS.md`, vendored protocol,
+  affected requirement-ledger entries, and conformance rules.
 - **Implementation or review:** invoke the repository-local `effect-nats-implementation` skill at
   `.agents/skills/effect-nats-implementation/SKILL.md` and follow its fidelity receipt.
 - **Feature, fix, stream, lifecycle, or integration-test work:** also invoke the repository-local
@@ -52,7 +59,7 @@ root export stays empty until an ADR approves the first API surface.
 1. State the protocol or API contract and its evidence.
 2. Add a failing unit, type, conformance, or integration test at the narrowest layer.
 3. Implement through internal modules; export only ADR-approved surface.
-4. Run `pnpm format:check`, `pnpm lint`, `pnpm check`, and `pnpm test`.
+4. Run `bun run format:check`, `bun run lint`, `bun run check`, and `bun run test`.
 5. Report which claims are tested locally, tested against a server, assumed, or still undecided.
 
 A change is complete when all four checks pass, public-surface changes cite an ADR, lifecycle and

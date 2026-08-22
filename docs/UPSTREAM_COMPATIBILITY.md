@@ -11,7 +11,7 @@ reproducible. It is a conformance-test input, not a claim that the pinned releas
 supported server.
 
 The runner installs an official `nats-io/nats-server` release artifact rather than relying on a
-Docker image. Every run prints the Node, pnpm, and server versions before verification starts.
+Docker image. Every run prints the Bun and server versions before verification starts.
 
 ## Upstream canary
 
@@ -19,8 +19,8 @@ Docker image. Every run prints the Node, pnpm, and server versions before verifi
 schedule, and manual dispatches. It:
 
 1. installs the latest stable native `nats-server` GitHub release;
-2. updates every declared `@nats-io/*` dependency to its latest npm release in the ephemeral
-   runner checkout;
+2. updates every declared `@nats-io/*` dependency in both Bun workspace packages to its latest npm
+   release in the ephemeral runner checkout;
 3. runs the type-check and complete test suite; and
 4. writes the exact tested versions to the GitHub job summary.
 
