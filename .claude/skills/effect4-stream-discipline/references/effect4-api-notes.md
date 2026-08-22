@@ -104,22 +104,24 @@ class LoopError extends Data.TaggedError("LoopError")<{
 
 const restart = Schedule.exponential("200 millis").pipe(
   Schedule.jittered,
-  Schedule.upTo({ duration: "30 seconds" }) // hard total-duration bound
+  Schedule.upTo({ duration: "30 seconds" }) // retry-window bound: checked between attempts; an in-flight attempt may overrun
 )
 
 const supervised = (loop: Effect.Effect<void, LoopError>) =>
   loop.pipe(
     // classify: only typed transient reasons retry; fatal variants fall through
     Effect.retry({ schedule: restart, while: (error) => error.reason === "transient" }),
-    // fatal errors and exhaustion surface here — log, and emit a status event
-    // or fail the loop's status surface where consumers can observe it
+    // fatal errors and exhaustion surface here, and the loop ENDS after this
+    // recovery: wire a real status surface (Deferred/Queue/state) at this spot
+    // in production code — the log below is the observable minimum, not the
+    // whole contract
     Effect.catch((error) => Effect.logError("background loop exhausted", error)),
     Effect.forkScoped
   )
 ```
 
 Rules: (1) retry only typed transient reasons at the narrowest idempotent
-boundary; (2) always bound with `upTo` or an attempt cap, and jitter;
+boundary; (2) always bound with `upTo` (a retry-window bound evaluated between attempts — never an attempt deadline; model hard deadlines separately) or an attempt cap, and jitter;
 (3) exhaustion must be visible — log, metric, or status event — never a
 silent stop; (4) `repeat` for unexpected normal completion only where normal
 completion is actually a fault; (5) continuous reconnect-style looping is

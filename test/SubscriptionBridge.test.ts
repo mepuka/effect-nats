@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest"
 import { Effect, Fiber, Latch, Stream } from "effect"
-import { make } from "../src/internal/SubscriptionBridge.ts"
+import * as SubscriptionBridge from "../src/internal/SubscriptionBridge.ts"
 
 const options = {
   capacity: 2,
@@ -10,7 +10,7 @@ const options = {
 
 it.effect("delivers offered values in arrival order", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>({ ...options, capacity: 8 })
+    const bridge = yield* SubscriptionBridge.make<number>({ ...options, capacity: 8 })
     yield* bridge.offer(1)
     yield* bridge.offer(2)
     yield* bridge.offer(3)
@@ -21,7 +21,7 @@ it.effect("delivers offered values in arrival order", () =>
 
 it.effect("offer beyond capacity fails naming capacity and pending", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>(options)
+    const bridge = yield* SubscriptionBridge.make<number>(options)
     yield* bridge.offer(1)
     yield* bridge.offer(2)
     const failure = yield* Effect.flip(bridge.offer(3))
@@ -34,7 +34,7 @@ it.effect("offer beyond capacity fails naming capacity and pending", () =>
 
 it.effect("stream terminates with the same error after overflow", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>(options)
+    const bridge = yield* SubscriptionBridge.make<number>(options)
     yield* bridge.offer(1)
     yield* bridge.offer(2)
     const offerFailure = yield* Effect.flip(bridge.offer(3))
@@ -44,7 +44,7 @@ it.effect("stream terminates with the same error after overflow", () =>
 
 it.effect("admission remains stopped after overflow", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>(options)
+    const bridge = yield* SubscriptionBridge.make<number>(options)
     yield* bridge.offer(1)
     yield* bridge.offer(2)
     const first = yield* Effect.flip(bridge.offer(3))
@@ -54,7 +54,7 @@ it.effect("admission remains stopped after overflow", () =>
 
 it.effect("offer after end fails as closed while buffered values still drain", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>({ ...options, capacity: 8 })
+    const bridge = yield* SubscriptionBridge.make<number>({ ...options, capacity: 8 })
     yield* bridge.offer(1)
     yield* bridge.offer(2)
     yield* bridge.end
@@ -66,7 +66,7 @@ it.effect("offer after end fails as closed while buffered values still drain", (
 
 it.effect("interrupting a blocked consumer leaves no phantom delivery", () =>
   Effect.gen(function*() {
-    const bridge = yield* make<number>({ ...options, capacity: 8 })
+    const bridge = yield* SubscriptionBridge.make<number>({ ...options, capacity: 8 })
     const seen: Array<number> = []
     const deliveredFirst = yield* Latch.make()
     const consumer = yield* bridge.stream.pipe(
@@ -90,4 +90,33 @@ it.effect("interrupting a blocked consumer leaves no phantom delivery", () =>
     yield* bridge.end
     const values = yield* Stream.runCollect(bridge.stream)
     expect(values).toEqual([])
+  }))
+
+it.effect("overflow drains admitted values before the terminal error; the trigger is rejected", () =>
+  Effect.gen(function*() {
+    const bridge = yield* SubscriptionBridge.make<number>({
+      operation: "test",
+      subject: "s",
+      capacity: 2
+    })
+    yield* bridge.offer(1)
+    yield* bridge.offer(2)
+    const rejected = yield* Effect.flip(bridge.offer(3))
+    expect(rejected._tag).toBe("SlowConsumerError")
+    const seen: Array<number> = []
+    const outcome = yield* Effect.flip(
+      Stream.runForEach(bridge.stream, (n) => Effect.sync(() => seen.push(n)))
+    )
+    expect(seen).toEqual([1, 2])
+    expect(outcome._tag).toBe("SlowConsumerError")
+  }))
+
+it.effect("non-positive and fractional capacities are construction defects", () =>
+  Effect.gen(function*() {
+    for (const capacity of [0, -1, 1.5, Number.NaN]) {
+      const exit = yield* Effect.exit(
+        SubscriptionBridge.make<number>({ operation: "test", subject: "s", capacity })
+      )
+      expect(exit._tag, String(capacity)).toBe("Failure")
+    }
   }))

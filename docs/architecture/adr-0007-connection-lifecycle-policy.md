@@ -12,6 +12,14 @@ the supervised connect/retry policy and release-drain policy implemented in
 for subscriptions are explicitly **not** decided here; they bind to the
 subscription slice.
 
+Scope note (post-merge reconciliation): this supervision applies to the INITIAL
+connect only — before any connection exists, where the official client's
+reconnect loop has nothing to run on. After establishment, the wrapped client's
+reconnect loop is the single owner per ADR-0001 decision 1 and the ADR-0002
+guardrails; this schedule never stacks on it. The `upTo` window is a
+retry-window bound evaluated between attempts, so one in-flight attempt may
+land past it (pinned by the lifecycle test's follow-through case).
+
 ## Decisions
 
 ### 1. Connect retry supervision
@@ -56,8 +64,11 @@ Release is idempotent and ordered: one drain attempt, then close, with close
 running even when drain fails. Without an explicit timeout the drain waits
 unboundedly (correctness over liveness); callers opt into a bounded drain,
 which abandons - not cancels - the underlying promise at the deadline because
-the official drain cannot be cancelled. Pinned by
-`test/internal/natsTransport.test.ts`.
+the official drain cannot be cancelled. Drain and close failures and deadline
+crossings are logged (observable, never typed finalizer failures), and forced
+close carries its own fixed five-second bound: the correctness-over-liveness
+argument covers user-work drain, not the close handshake. Pinned by
+`test/NatsTransport.test.ts`.
 
 ## Consequences
 

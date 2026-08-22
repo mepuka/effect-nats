@@ -83,8 +83,10 @@ optional `layerConfig` built on Effect `Config`; library code never reads `proce
 ([STYLE.md:67-68](../STYLE.md)). Every option above must be expressible in the typed surface —
 an official capability silently dropped (for example, no way to express `waitOnFirstConnect`)
 is a defect against official-client parity. The `ignoreAuthErrorAbort` fact also pins the
-default fatal-auth rule for decision 4: two identical consecutive auth errors abort the loop
-unless this override is set.
+default fatal-auth rule for decision 4. Wording nuance recorded for the implementation: the
+option docstring says two "identical" consecutive auth errors, while the protocol source aborts
+on two consecutive auth-family errors (`nats.js@3a7b736:core/src/protocol.ts:814-840`); the
+source behavior is authoritative and the conformance test pins it.
 
 ## Consequences
 

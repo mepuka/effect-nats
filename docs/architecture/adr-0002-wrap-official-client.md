@@ -38,6 +38,11 @@ the official surface this client depends on; official packages are acquired insi
 and official types never leak above the seam. (Absorbed from the transport branch's proposed
 wrap ADR, which this accepted ADR supersedes.) Connect/drain supervision details are ADR-0007.
 
+Scope boundary: this ADR selects the adapter for Core, JetStream, and KV. It does NOT discharge
+the Object Store adapter decision — proposed ADR-0006 decides that surface (implementing over the
+internal JetStream seam rather than `@nats-io/obj`), and Object Store implementation waits on its
+acceptance.
+
 ## Consequences
 
 Workbench decision items 1 and 5 are discharged for the first implementation pass; the

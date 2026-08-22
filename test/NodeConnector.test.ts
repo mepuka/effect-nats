@@ -7,9 +7,14 @@ import {
   TimeoutError,
   UserAuthenticationExpiredError
 } from "@nats-io/nats-core"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import type { ConnectFatalError, ConnectTransientError } from "../src/internal/Errors.ts"
-import { classifyConnectCause, nodeConnector } from "../src/internal/NodeConnector.ts"
+import type { Connection } from "../src/internal/NatsTransport.ts"
+import {
+  classifyConnectCause,
+  connectorFromDial,
+  nodeConnector
+} from "../src/internal/NodeConnector.ts"
 
 it("classifies connect-time error classes", () => {
   const auth = classifyConnectCause(new AuthorizationError("authorization violation"))
@@ -62,3 +67,47 @@ it.effect("a live dial to a closed local port surfaces transient refusal", () =>
     expect(failure._tag).toBe("ConnectTransientError")
     expect((failure as ConnectTransientError).reason).toBe("refused")
   }))
+
+it.effect("a connection resolving after interruption is closed exactly once, never leaked", () =>
+  Effect.gen(function*() {
+    let closes = 0
+    let resolveDial: (connection: Connection) => void = () => {}
+    const lateConnection: Connection = {
+      closed: () => new Promise(() => {}),
+      close: () => {
+        closes++
+        return Promise.resolve()
+      },
+      drain: () => Promise.resolve(),
+      flush: () => Promise.resolve(),
+      isClosed: () => false,
+      isDraining: () => false,
+      status: () => ({ [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) })
+    }
+    const connector = connectorFromDial(() =>
+      new Promise((resolve) => {
+        resolveDial = resolve
+      })
+    )
+    const fiber = yield* Effect.forkChild(connector.connect({ servers: ["fake"] }), {
+      startImmediately: true
+    })
+    yield* Fiber.interrupt(fiber)
+    resolveDial(lateConnection)
+    yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(closes).toBe(1)
+  }))
+
+it("classifies TLS certificate failures as fatal config, not retryable weather", () => {
+  const certError = Object.assign(new Error("unable to verify the first certificate"), {
+    code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
+  })
+  const issue = classifyConnectCause(certError)
+  expect(issue._tag).toBe("ConnectFatalError")
+  if (issue._tag === "ConnectFatalError") expect(issue.reason).toBe("config")
+})
+
+it("redacts server userinfo out of error detail", () => {
+  const issue = classifyConnectCause(new Error("dial nats://admin:hunter2@10.0.0.5:4222 failed"))
+  expect(issue.detail).toBe("dial nats://<redacted>@10.0.0.5:4222 failed")
+})

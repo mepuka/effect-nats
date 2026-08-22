@@ -83,7 +83,11 @@ official implementation facts already pinned:
 - Watch queues are bounded with an explicit, contract-stated overflow behavior. `Queue.dropping`
   is not a default for KV watches; silent loss requires an accepted ADR defining a lossy
   observation API.
-- "Initial values done" is a distinct, observable stream event, not an inferred condition.
+- "Initial values done" is a distinct, observable stream event, not an inferred condition. This
+  is ADR-8-mandated, not invented: "Internal to the watcher you reach this state the first time
+  any message has a `Pending==0` ... The signal must always be sent"
+  (`nats-architecture-and-design@e23afc3:adr/ADR-8.md:419-422`), including on an empty bucket
+  (immediate signal; conformance-tested against nats-server v2.14.5).
 - Watch termination distinguishes: consumer deleted, bucket deleted, connection lost
   (reconnect/resume policy is an open decision), and normal scope interruption. Interruption of a
   pending watch completes in bounded time — the iterator-bridge proof gate from the stream skill

@@ -4,11 +4,14 @@ import { ConnectionClosedError, SlowConsumerError } from "./Errors.ts"
 /**
  * Bridges NATS delivery into a pull-based Effect Stream.
  *
- * The bridge owns one finite queue with the caller-declared `capacity`.
- * Overflow policy is fail-and-terminate: when admission exceeds capacity the
- * offer fails, the stream fails with the same `SlowConsumerError` instance,
- * and further offers keep failing it. Buffered values are not delivered
- * because they were never processed.
+ * The bridge owns one finite queue with the caller-declared `capacity`
+ * (validated: a positive integer, or construction is a defect). Overflow
+ * policy is fail-and-terminate with drain-first ordering: when admission
+ * exceeds capacity the offer fails, already-admitted values still drain to
+ * the consumer, and the stream then fails with the same `SlowConsumerError`
+ * instance; further offers keep failing it. The triggering value is the one
+ * rejected - admitted values are never silently dropped (ADR-0005: overflow
+ * is terminal and typed, never lossy).
  *
  * After `end`, offers fail with `ConnectionClosedError` while buffered values
  * still drain to the consumer.
@@ -30,6 +33,11 @@ export const make = <A>(options: {
   readonly capacity: number
 }): Effect.Effect<SubscriptionBridge<A>> =>
   Effect.gen(function*() {
+    if (!Number.isInteger(options.capacity) || options.capacity <= 0) {
+      return yield* Effect.die(
+        new Error(`SubscriptionBridge capacity must be a positive integer, got ${options.capacity}`)
+      )
+    }
     const queue = yield* Queue.bounded<A, Cause.Done | SlowConsumerError>(options.capacity)
     let terminal: SlowConsumerError | ConnectionClosedError | undefined
     let ended = false

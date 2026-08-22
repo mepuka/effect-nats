@@ -88,7 +88,7 @@ example tests.
 
 ### Phase 2 — Red before green, on the seams
 
-One slice at a time: write the failing test against a public seam, watch it
+One slice at a time: write the failing test against an agreed observable seam (package-public, or an internal boundary a task or accepted ADR names), watch it
 fail for the _expected reason_, make the minimal change, watch it pass. Two
 Effect-4-specific mechanics matter here:
 

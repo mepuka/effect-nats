@@ -55,6 +55,8 @@ const transportFromConnection = (connection: Connection, drainTimeout?: Duration
       const release = Effect.gen(function*() {
         if (released) return
         released = true
+        // Finalizer outcomes are observable, never typed failures: a release
+        // that fails or times out logs the fact and proceeds to forced close.
         const drainAttempt = Effect.tryPromise({
           try: () => connection.drain(),
           catch: (cause) =>
@@ -62,15 +64,33 @@ const transportFromConnection = (connection: Connection, drainTimeout?: Duration
               operation: "NatsTransport.release/drain",
               cause
             })
-        }).pipe(Effect.ignore)
+        }).pipe(
+          Effect.catch((error) => Effect.logWarning("NatsTransport release: drain failed", error))
+        )
         yield* drainTimeout !== undefined
-          ? drainAttempt.pipe(Effect.timeout(drainTimeout), Effect.ignore)
+          ? drainAttempt.pipe(
+            Effect.timeoutOrElse({
+              duration: drainTimeout,
+              orElse: () =>
+                Effect.logWarning(
+                  "NatsTransport release: drain deadline passed; abandoning drain and forcing close"
+                )
+            })
+          )
           : drainAttempt
+        // close is not covered by the ADR-0007 correctness-over-liveness drain
+        // rule: it should settle promptly, so it gets a fixed bound
         yield* Effect.tryPromise({
           try: () => connection.close(),
           catch: (cause) =>
             new ConnectionClosedError({ operation: "NatsTransport.release/close", cause })
-        }).pipe(Effect.ignore)
+        }).pipe(
+          Effect.catch((error) => Effect.logWarning("NatsTransport release: close failed", error)),
+          Effect.timeoutOrElse({
+            duration: "5 seconds",
+            orElse: () => Effect.logWarning("NatsTransport release: close did not settle in 5s")
+          })
+        )
       })
 
       const flush = Effect.fn("NatsTransport.flush")(function*(): Generator<
@@ -92,9 +112,11 @@ const transportFromConnection = (connection: Connection, drainTimeout?: Duration
   )
 
 /**
- * Production default for the supervised connect loop: exponential backoff,
- * jittered, hard-bounded at thirty seconds of total retrying. Bounded and
- * jittered per the repository style; exhaustion surfaces as a typed error.
+ * Production default for the supervised first-connect loop: exponential
+ * backoff, jittered, with a thirty-second retry window. The window is
+ * evaluated between attempts, so an in-flight attempt may land past it
+ * (Schedule.upTo is a retry-window bound, not an attempt deadline). Bounded
+ * and jittered per the repository style; exhaustion surfaces typed.
  */
 const defaultConnectSchedule = Schedule.exponential("200 millis").pipe(
   Schedule.jittered,
@@ -114,6 +136,7 @@ const defaultConnectSchedule = Schedule.exponential("200 millis").pipe(
 export const layerConnecting = (options: {
   readonly servers: ReadonlyArray<string>
   readonly schedule?: Schedule.Schedule<unknown> | undefined
+  readonly drainTimeout?: Duration.Input | undefined
 }) =>
   Layer.effect(
     NatsTransport,
@@ -144,6 +167,6 @@ export const layerConnecting = (options: {
           })
         )
       )
-      return yield* transportFromConnection(connection)
+      return yield* transportFromConnection(connection, options.drainTimeout)
     })
   )
