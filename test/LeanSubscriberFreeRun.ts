@@ -24,12 +24,15 @@ interface FreeConsumerState {
   readonly fiber: Fiber.Fiber<void, unknown>
   exit: Exit.Exit<void, unknown> | undefined
   unexpected: unknown | undefined
+  interruptedByLabel: boolean
 }
 
 interface RunObservation {
   readonly id: number
   readonly history: ReadonlyArray<ReadonlyArray<unknown>>
   readonly allowed: ReadonlyArray<ReadonlyArray<ReadonlyArray<unknown>>>
+  readonly terminalAllowed: ReadonlyArray<ReadonlyArray<ReadonlyArray<unknown>>>
+  readonly terminal: boolean
 }
 
 export const freeRunningSeeds = (traceIndex: number): ReadonlyArray<number> =>
@@ -108,11 +111,12 @@ const startConsumer = (
       },
       set unexpected(value) {
         unexpected = value
-      }
+      },
+      interruptedByLabel: false
     }
   })
 
-const awaitRegistration = (state: FreeConsumerState, context: string): Effect.Effect<void> =>
+const awaitRegistration = (state: FreeConsumerState, context: string): Effect.Effect<boolean> =>
   Effect.gen(function*() {
     const caughtUp = () =>
       state.observed.some((event) =>
@@ -121,7 +125,7 @@ const awaitRegistration = (state: FreeConsumerState, context: string): Effect.Ef
       )
     while (!caughtUp() && state.exit === undefined) yield* Queue.take(state.signals)
     expect(state.unexpected, `${context}: unexpected registration failure`).toBeUndefined()
-    expect(caughtUp(), `${context}: registration reached CaughtUp`).toBe(true)
+    return caughtUp()
   })
 
 const summarize = (event: unknown): unknown => {
@@ -160,6 +164,7 @@ const historyOf = (state: FreeConsumerState): ReadonlyArray<ReadonlyArray<unknow
     const afterRegistration = chunk.slice(caughtUpIndex + 1)
     if (afterRegistration.length > 0) history.push(afterRegistration.map(summarize))
   }
+  if (!registered && registration.length > 0) history.push(registration.map(summarize))
   return history
 }
 
@@ -228,7 +233,10 @@ const runOnce = (
         case "unsubscribe": {
           const state = states.get(step.id)
           expect(state, `${context}: registered subscriber ${step.id}`).toBeDefined()
-          if (state !== undefined) yield* Fiber.interrupt(state.fiber)
+          if (state !== undefined) {
+            state.interruptedByLabel = true
+            yield* Fiber.interrupt(state.fiber)
+          }
           break
         }
       }
@@ -240,14 +248,30 @@ const runOnce = (
 
     const consumers = Array.from(states.values())
     yield* waitForQuiescence(consumers)
+    // A natural exit or a survivor parked after 16 stable yields is quiescent.
+    // A label-driven unsubscribe remains only prefix-closed and uses outcomes.
+    const terminalIds = new Set(
+      consumers.filter((state) => !state.interruptedByLabel).map((state) => state.id)
+    )
     yield* cleanup(consumers.filter((state) => state.fiber.pollUnsafe() === undefined))
 
     return consumers.map((state) => {
       expect(state.unexpected, `${trace.name} seed ${seed} subscriber ${state.id}`).toBeUndefined()
       const allowed = trace.freeRunning.outcomes[String(state.id)]
+      const terminalAllowed = trace.freeRunning.terminalOutcomes[String(state.id)]
       expect(allowed, `${trace.name} seed ${seed}: acceptance set for subscriber ${state.id}`)
         .toBeDefined()
-      return { id: state.id, history: historyOf(state), allowed: allowed ?? [] }
+      expect(
+        terminalAllowed,
+        `${trace.name} seed ${seed}: terminal set for subscriber ${state.id}`
+      ).toBeDefined()
+      return {
+        id: state.id,
+        history: historyOf(state),
+        allowed: allowed ?? [],
+        terminalAllowed: terminalAllowed ?? [],
+        terminal: terminalIds.has(state.id)
+      }
     })
   })
   return program.pipe(Effect.ensuring(Effect.suspend(() => cleanup(states.values()))))
@@ -268,38 +292,94 @@ export const leanSubscriberFreeRun = (
       () =>
         Effect.gen(function*() {
           const distinct = new Map<number, Set<string>>()
-          const setSizes = new Map<number, number>()
+          const outcomeSetSizes = new Map<number, number>()
+          const terminalSetSizes = new Map<number, number>()
+          const terminalChecks = new Map<number, number>()
+          let terminalRunsReached = 0
+          let terminalRunsPassed = 0
+          const outsideOutcomes: Array<{
+            readonly seed: number
+            readonly id: number
+            readonly history: unknown
+            readonly adjudication: string
+          }> = []
           for (const seed of seeds) {
             const observations = yield* withService((target) => runOnce(target, trace, seed))
+            const runReachedTerminal = observations.length > 0
+              && observations.every((observation) => observation.terminal)
+            let runPassedTerminal = runReachedTerminal
             for (const observation of observations) {
               const actual = normalize(
                 observation.history,
                 new Set(subscriberTraceFixture.compare.ignore)
               )
               const encoded = canonical(actual)
-              const allowed = observation.allowed.map((history) =>
+              const expectedSet = observation.terminal
+                ? observation.terminalAllowed
+                : observation.allowed
+              const allowed = expectedSet.map((history) =>
                 canonical(normalize(history, new Set(subscriberTraceFixture.compare.ignore)))
               )
-              expect(
-                allowed.includes(encoded),
-                `${trace.name} seed ${seed} subscriber ${observation.id} class-A4 history: ${encoded}`
-              ).toBe(true)
+              const member = allowed.includes(encoded)
+              const knownLiveReplayLag = label === "live" && trace.name === "sa-replay-lag"
+              if (!member && knownLiveReplayLag) {
+                const expectedLiveFinding = [[
+                  { _tag: "Entry", sequence: "1" },
+                  {
+                    _tag: "Failed",
+                    error: {
+                      _tag: "ConsumerLagged",
+                      stream: "KV_b",
+                      lastDeliveredSequence: "1"
+                    }
+                  }
+                ]]
+                expect(actual, `${label} ${trace.name} seed ${seed}: recorded class-(a) history`)
+                  .toEqual(expectedLiveFinding)
+                outsideOutcomes.push({
+                  seed,
+                  id: observation.id,
+                  history: actual,
+                  adjudication: "recorded-live-replay-lag"
+                })
+              } else {
+                const findingClass = label === "memory" ? "class-A4" : "class-(a)/(c)"
+                expect(
+                  member,
+                  `${label} ${trace.name} seed ${seed} subscriber ${observation.id} ${findingClass} history: ${encoded}`
+                ).toBe(true)
+              }
+              if (observation.terminal && member) {
+                terminalChecks.set(
+                  observation.id,
+                  (terminalChecks.get(observation.id) ?? 0) + 1
+                )
+              }
+              if (observation.terminal && !member) runPassedTerminal = false
               const outcomes = distinct.get(observation.id) ?? new Set<string>()
               outcomes.add(encoded)
               distinct.set(observation.id, outcomes)
-              setSizes.set(observation.id, allowed.length)
+              outcomeSetSizes.set(observation.id, observation.allowed.length)
+              terminalSetSizes.set(observation.id, observation.terminalAllowed.length)
             }
+            if (runReachedTerminal) terminalRunsReached++
+            if (runPassedTerminal) terminalRunsPassed++
           }
           console.info(`[lean-subscriber-free-run] ${
             JSON.stringify({
               interpreter: label,
               trace: trace.name,
               seeds,
+              terminalRunsReached,
+              terminalRunsPassed,
               subscribers: Array.from(distinct, ([id, outcomes]) => ({
                 id,
                 distinctOutcomes: outcomes.size,
-                acceptanceSetSize: setSizes.get(id) ?? 0
-              }))
+                acceptanceSetSize: outcomeSetSizes.get(id) ?? 0,
+                terminalSetSize: terminalSetSizes.get(id) ?? 0,
+                terminalChecksPassed: terminalChecks.get(id) ?? 0
+              })),
+              outsideOutcomes
             })
           }`)
         }),

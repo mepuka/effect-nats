@@ -82,7 +82,8 @@ export const SummaryEvent = Schema.Union([
 ])
 export const SubscriberHistory = Schema.Array(Schema.Array(SummaryEvent))
 const FreeRunning = Schema.Struct({
-  outcomes: Schema.Record(Schema.String, Schema.Array(SubscriberHistory))
+  outcomes: Schema.Record(Schema.String, Schema.Array(SubscriberHistory)),
+  terminalOutcomes: Schema.Record(Schema.String, Schema.Array(SubscriberHistory))
 })
 const SubscriberObserved = Schema.Array(Schema.Struct({
   id: Schema.Number,
