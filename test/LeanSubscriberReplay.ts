@@ -1,7 +1,12 @@
 import { expect, it } from "@effect/vitest"
 import { Deferred, Effect, Exit, Fiber, Queue, Result, Schema, Stream } from "effect"
 import { existsSync, readFileSync } from "node:fs"
-import type { ConsumerLagged, JetStream, StreamNotFound } from "../src/internal/JetStream.ts"
+import type {
+  ConsumeOptions as RuntimeConsumeOptions,
+  ConsumerLagged,
+  JetStream,
+  StreamNotFound
+} from "../src/internal/JetStream.ts"
 import { ExpectedOutcome, Message, normalize, observeStep, Op } from "./LeanTraceReplay.ts"
 
 const utf8 = new TextEncoder()
@@ -174,9 +179,11 @@ const isRecordedFailure = (error: unknown): boolean =>
   && "_tag" in error
   && (error._tag === "ConsumerLagged" || error._tag === "StreamNotFound")
 
-const startConsumer = (
+const startGatedState = (
   service: JetStream["Service"],
-  step: typeof RegisterStep.Type
+  id: number,
+  stream: string,
+  options: RuntimeConsumeOptions
 ): Effect.Effect<ConsumerState> =>
   Effect.gen(function*() {
     const observed: Array<unknown> = []
@@ -188,7 +195,7 @@ const startConsumer = (
     let unexpected: unknown | undefined
 
     const run = Stream.runForEachArray(
-      service.consume(step.stream, optionsOf(step.options)),
+      service.consume(stream, options),
       (chunk) =>
         Effect.gen(function*() {
           const recorded = Array.from(chunk)
@@ -225,7 +232,7 @@ const startConsumer = (
     )
     const fiber = yield* Effect.forkChild(run, { startImmediately: true })
     return {
-      id: step.id,
+      id,
       observed,
       chunks,
       gates,
@@ -246,6 +253,12 @@ const startConsumer = (
       }
     }
   })
+
+const startConsumer = (
+  service: JetStream["Service"],
+  step: typeof RegisterStep.Type
+): Effect.Effect<ConsumerState> =>
+  startGatedState(service, step.id, step.stream, optionsOf(step.options))
 
 const waitForLength = (
   state: ConsumerState,
@@ -274,6 +287,62 @@ const armGate = (state: ConsumerState, context: string): Effect.Effect<void> =>
       false
     )
     expect(state.fiber.pollUnsafe(), `${context}: consumer fiber remains parked`).toBeUndefined()
+  })
+
+export interface GatedSubscriber {
+  readonly observed: ReadonlyArray<unknown>
+  readonly chunks: ReadonlyArray<ReadonlyArray<unknown>>
+  readonly awaitRegistration: Effect.Effect<ReadonlyArray<unknown>>
+  readonly pull: Effect.Effect<ReadonlyArray<unknown>>
+  readonly interrupt: Effect.Effect<void>
+}
+
+/** Test-only controller implementing the schema-2 one-gate-per-takeAll protocol. */
+export const makeGatedSubscriber = (
+  service: JetStream["Service"],
+  id: number,
+  stream: string,
+  options: RuntimeConsumeOptions
+): Effect.Effect<GatedSubscriber> =>
+  Effect.map(startGatedState(service, id, stream, options), (state) => {
+    const awaitRegistration = Effect.gen(function*() {
+      const caughtUp = () =>
+        state.observed.some((event) =>
+          typeof event === "object" && event !== null && "_tag" in event
+          && event._tag === "CaughtUp"
+        )
+      while (!caughtUp() && state.exit === undefined) yield* Queue.take(state.signals)
+      if (state.unexpected !== undefined) return yield* Effect.die(state.unexpected)
+      if (!caughtUp()) {
+        return yield* Effect.die(new Error(`subscriber ${id} exited before CaughtUp`))
+      }
+      yield* armGate(state, `subscriber ${id} registration`)
+      return state.observed.slice()
+    })
+    const pull = Effect.gen(function*() {
+      const gate = state.gate
+      if (gate === undefined) return yield* Effect.die(new Error(`subscriber ${id} has no gate`))
+      state.gate = undefined
+      const beforeObserved = state.observed.length
+      const beforeChunks = state.chunks.length
+      if (!(yield* Deferred.succeed(gate.release, void 0))) {
+        return yield* Effect.die(new Error(`subscriber ${id} gate was already released`))
+      }
+      while (state.chunks.length === beforeChunks && state.exit === undefined) {
+        yield* Queue.take(state.signals)
+      }
+      if (state.unexpected !== undefined) return yield* Effect.die(state.unexpected)
+      const events = state.observed.slice(beforeObserved)
+      if (state.exit === undefined) yield* armGate(state, `subscriber ${id} after pull`)
+      return events
+    })
+    return {
+      observed: state.observed,
+      chunks: state.chunks,
+      awaitRegistration,
+      pull,
+      interrupt: Fiber.interrupt(state.fiber).pipe(Effect.asVoid)
+    }
   })
 
 const checkCounts = (
