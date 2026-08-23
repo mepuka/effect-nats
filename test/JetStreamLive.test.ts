@@ -6,6 +6,7 @@ import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
 import type { JetStream } from "../src/internal/JetStream.ts"
 import * as JetStreamLive from "../src/internal/JetStreamLive.ts"
 import { conformance } from "./JetStreamConformance.ts"
+import { leanSubscriberReplay } from "./LeanSubscriberReplay.ts"
 import { leanTraceReplay } from "./LeanTraceReplay.ts"
 import * as TestServer from "./TestServer.ts"
 
@@ -32,6 +33,7 @@ const withLive = <A, E>(
 
 conformance("live", (f) => withLive(f), 30_000)
 leanTraceReplay("live", withLive, 30_000)
+leanSubscriberReplay("live", (f) => withLive((service) => f({ service })), 30_000)
 
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder()

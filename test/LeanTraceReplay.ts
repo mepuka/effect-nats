@@ -9,13 +9,13 @@ const findingsDocument = "docs/research/lean-trace-live-findings.md"
 const roomy = { _tag: "TerminateOnLag", messages: 4096 } as const
 
 const Headers = Schema.Array(Schema.Tuple([Schema.String, Schema.String]))
-const Config = Schema.Struct({
+export const Config = Schema.Struct({
   name: Schema.String,
   subjects: Schema.Array(Schema.String),
   maxMessagesPerSubject: Schema.Number,
   allowRollup: Schema.Boolean
 })
-const Message = Schema.Struct({
+export const Message = Schema.Struct({
   subject: Schema.String,
   sequence: Schema.String,
   payload: Schema.String,
@@ -23,7 +23,7 @@ const Message = Schema.Struct({
   timestampMillis: Schema.Number
 })
 
-const Op = Schema.Union([
+export const Op = Schema.Union([
   Schema.Struct({ op: Schema.Literal("createStream"), config: Config }),
   Schema.Struct({ op: Schema.Literal("getStream"), name: Schema.String }),
   Schema.Struct({ op: Schema.Literal("deleteStream"), name: Schema.String }),
@@ -76,7 +76,7 @@ const ExpectedError = Schema.Union([
     subject: Schema.String
   })
 ])
-const ExpectedOutcome = Schema.Union([
+export const ExpectedOutcome = Schema.Union([
   Schema.Struct({ ok: Ok }),
   Schema.Struct({ error: ExpectedError })
 ])
@@ -137,7 +137,7 @@ const liveOverrides: Overrides = existsSync(overridesUrl)
   ? decodeJson(LiveOverrides, overridesUrl)
   : { schema: 1, traces: {} }
 
-const normalize = (value: unknown, ignored: ReadonlySet<string>): unknown => {
+export const normalize = (value: unknown, ignored: ReadonlySet<string>): unknown => {
   if (typeof value === "bigint") return value.toString()
   if (value instanceof Uint8Array) return decoder.decode(value)
   if (value instanceof Map) {
@@ -154,7 +154,7 @@ const normalize = (value: unknown, ignored: ReadonlySet<string>): unknown => {
   return value
 }
 
-const observe = <A, E>(
+export const observe = <A, E>(
   effect: Effect.Effect<A, E>,
   success: (value: A) => unknown
 ): Effect.Effect<unknown> =>
@@ -163,7 +163,7 @@ const observe = <A, E>(
       ? { ok: success(exit.value) }
       : { error: Result.getOrThrow(Exit.findError(exit)) })
 
-const observeStep = (
+export const observeStep = (
   service: JetStream["Service"],
   op: FixtureOp
 ): Effect.Effect<unknown> => {

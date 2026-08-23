@@ -3,6 +3,7 @@ import { Deferred, Effect, Exit, Fiber, Queue, Result, Stream } from "effect"
 import type { ConsumeEvent } from "../src/internal/JetStream.ts"
 import * as Memory from "../src/internal/JetStreamMemory.ts"
 import { conformance } from "./JetStreamConformance.ts"
+import { leanSubscriberGateSelfCheck, leanSubscriberReplay } from "./LeanSubscriberReplay.ts"
 import { leanTraceReplay } from "./LeanTraceReplay.ts"
 
 const utf8 = new TextEncoder()
@@ -17,6 +18,8 @@ const kvConfig = (bucket: string) => ({
 
 conformance("memory", (f) => Effect.flatMap(Memory.make, (memory) => f(memory.service)))
 leanTraceReplay("memory", (f) => Effect.flatMap(Memory.make, (memory) => f(memory.service)))
+leanSubscriberReplay("memory", (f) => Effect.flatMap(Memory.make, f))
+leanSubscriberGateSelfCheck((f) => Effect.flatMap(Memory.make, f))
 
 // Memory-only observations below: the diagnostic subscriber counter and the
 // publisher-suspension face of PullWindow — on this interpreter the publisher
