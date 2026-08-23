@@ -7,7 +7,9 @@
     "**/dist",
     "**/coverage",
     "packages/agents/**",
-    "test/fixtures/lean/sequential-traces.json"
+    "test/fixtures/lean/sequential-traces.json",
+    "test/fixtures/lean/subscriber-traces.json",
+    "test/fixtures/lean/live-overrides-subscriber.json"
   ],
   "indentWidth": 2,
   "lineWidth": 100,
