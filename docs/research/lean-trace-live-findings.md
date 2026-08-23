@@ -77,33 +77,46 @@ histories, not a refinement proof or a general claim about JetStream scheduling.
 
 The gated replay used `test/fixtures/lean/subscriber-traces.json` through the internal
 `JetStream["Service"]` seam. Each live trace used a fresh scoped server, connection, JetStream
-domain, and store directory through `test/TestServer.ts`. Before a labeled `pull`, the live harness
-waited for `NatsConnection.flush()` so prior publishes had reached the client callbacks; the
-consumer remained parked on its `Deferred` gate throughout that wire barrier. Without the barrier,
-a PubAck could resolve before both callbacks were dispatched, letting one model pull become an
-artificial one-entry chunk.
+domain, and store directory through `test/TestServer.ts`. `settleBeforePull` is the live harness
+convention that waits for `NatsConnection.flush()` before a labeled `pull`, while the consumer
+remains parked on its `Deferred` gate. The convention prevents a PubAck from resolving before all
+earlier message callbacks are dispatched and splitting one model pull into an artificial
+one-entry chunk. It is a harness synchronization boundary, not a claim that NATS `flush` generally
+witnesses completion of subscriber application work.
 
 - NATS Server: `nats-server v2.14.5`
 - NATS clients: `@nats-io/jetstream`, `@nats-io/nats-core`, and
   `@nats-io/transport-node` `3.4.0`
 - Runtime/client foundation: Bun `1.3.14`; Effect `4.0.0-rc.111`
+- Fixture toolchain: `leanprover/lean4:v4.33.0`
 - Fixture producer: `EffectNatsSubstrate`
 - Fixture schema/snapshot: `2` / `r3.1`
 - Fixture model pin: effect-nats `872bd7f`
-- Fixture Foldable commit: `0c118600cf7edd670311d5d5b998e348be74eb7c`
+- Fixture Foldable commit: `1c8ddc5084d2ddafd8924571df5494e1a593eda5`
 - Comparison ignored: `timestampMillis` only
 
 ### Gated replay findings
 
-| Class                                      | Result                          | Evidence                                                                                                                                                                                         |
-| ------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| (a) replay-through-queue lag               | Not observed in these histories | All registration event lists matched exactly. No schema-2 registration combines replay larger than its declared capacity, so this does not refute ADR-0008's general live replay-lag difference. |
-| (b) `ConsumerLagged.lastDeliveredSequence` | Exact match; no override        | `sa-lag` and `sa-resume` both observed `2`, after draining sequence 2 and before the terminal failure.                                                                                           |
-| (c) `CaughtUp` position                    | Exact match; no override        | Every registration and final gated history placed the marker exactly where the fixture does.                                                                                                     |
-| (d) `subscriberCount`                      | Unobservable on live            | Thirteen non-empty count assertions were skipped through explicit `counts: "unobservable"` rows. Memory asserted every one exactly.                                                              |
+| Class                                      | Result                               | Evidence                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (a) replay-through-queue lag               | Reached by `sa-replay-lag`           | The model registers with replay `[1, 2, 3, CaughtUp]`; live admits replay entry `1` and then reports `ConsumerLagged(lastDeliveredSequence = 1)` before `CaughtUp`. The later modeled pulls are unavailable. This is ADR-0008's declared implementation difference, now reached by a generated trace. |
+| (b) `ConsumerLagged.lastDeliveredSequence` | Exact outside the class-(a) boundary | `sa-lag` and `sa-resume` both observed `2`. In `sa-replay-lag`, the model reaches `4` after replay outside the queue, while live terminates during replay at `1`; that difference is part of the class-(a) event override rather than a separate diagnostic discrepancy.                              |
+| (c) `CaughtUp` position                    | Exact outside the class-(a) boundary | Every earlier registration placed the marker exactly where the fixture does. `sa-replay-lag` live terminates before the marker, recorded explicitly rather than normalized away.                                                                                                                      |
+| (d) `subscriberCount`                      | Unobservable on live                 | Fifteen non-empty count assertions are skipped through explicit `counts: "unobservable"` rows. Memory asserts every one exactly.                                                                                                                                                                      |
 
-There are no live `outcome` or `events` overrides. The schema-2 override rows are only the following
-observation-boundary declarations:
+There are no live `outcome` overrides. `sa-replay-lag` adds the following class-(a) event and final
+history rows; every row points back to this findings document:
+
+| Trace           | Point           | Model assertion                                                    | Live observation                              |
+| --------------- | --------------- | ------------------------------------------------------------------ | --------------------------------------------- |
+| `sa-replay-lag` | step 4 register | `[Entry 1, Entry 2, Entry 3, CaughtUp]`                            | `[Entry 1, Failed(ConsumerLagged, last = 1)]` |
+| `sa-replay-lag` | step 7 pull     | `[Entry 4]`                                                        | `[]` — the consumer already terminated        |
+| `sa-replay-lag` | step 8 pull     | `[Failed(ConsumerLagged, last = 4)]`                               | `[]` — the consumer already terminated        |
+| `sa-replay-lag` | `finalObserved` | `[Entry 1, Entry 2, Entry 3, CaughtUp, Entry 4, Failed(last = 4)]` | `[Entry 1, Failed(last = 1)]`                 |
+
+The override decoder now supports a finding-linked `finalObserved` row; this closes the earlier F8
+gap in which step-event overrides could not express a divergent final history. Live count
+observation-boundary declarations are:
 
 | Trace           | Step | Fixture assertion skipped on live |
 | --------------- | ---: | --------------------------------- |
@@ -120,9 +133,12 @@ observation-boundary declarations:
 | `sa-accounting` |    4 | `subscriberCount("KV_b") = 1`     |
 | `sa-accounting` |    5 | `subscriberCount("KV_b") = 0`     |
 | `sa-drain`      |    7 | `subscriberCount("KV_b") = 1`     |
+| `sa-replay-lag` |    4 | `subscriberCount("KV_b") = 1`     |
+| `sa-replay-lag` |    6 | `subscriberCount("KV_b") = 0`     |
 
 Skipped-count totals per trace are therefore: `sa-replay` 1, `sa-starts` 2, `sa-filters` 0,
-`sa-delete` 3, `sa-lag` 1, `sa-resume` 1, `sa-accounting` 4, and `sa-drain` 1.
+`sa-delete` 3, `sa-lag` 1, `sa-resume` 1, `sa-accounting` 4, `sa-drain` 1, and
+`sa-replay-lag` 2.
 
 The generated `finalObserved` field is a selective assertion list, matching
 `SubTraces.lean.checkFinal`: the harness compares every subscriber ID named by the fixture and does
@@ -136,7 +152,7 @@ labels; `pull` labels performed no consumer action. The seed ranges below are in
 every integer in the range, so they record all 25 seeds per trace and are identical across the two
 interpreters.
 
-Distinct results are shown as `observed / acceptance-set size` per subscriber ID.
+Distinct results are shown as `observed / prefix-closed acceptance-set size` per subscriber ID.
 
 | Trace           | Seeds         | Memory                         | Live                           |
 | --------------- | ------------- | ------------------------------ | ------------------------------ |
@@ -147,10 +163,22 @@ Distinct results are shown as `observed / acceptance-set size` per subscriber ID
 | `sa-lag`        | 731400–731424 | id 0: 4 / 8                    | id 0: 4 / 8                    |
 | `sa-resume`     | 731500–731524 | id 0: 4 / 8; id 1: 1 / 1       | id 0: 4 / 8; id 1: 1 / 1       |
 | `sa-accounting` | 731600–731624 | ids 0–1: 1 / 1                 | ids 0–1: 1 / 1                 |
-| `sa-drain`      | 731700–731724 | id 0: 4 / 14                   | id 0: 2 / 14                   |
+| `sa-drain`      | 731700–731724 | id 0: 4 / 14                   | id 0: 3 / 14                   |
+| `sa-replay-lag` | 731800–731824 | id 0: 2 / 4                    | id 0: 1 / 4 (class (a))        |
 
-No observed history fell outside its generated acceptance set, so this pass records no class-A4
-finding and no adjudication row. The sampled yields exposed multiple accepted lag/resume histories
-and more memory than live chunk placements for `sa-drain`; they did not diversify the other
-recorded histories. This mode does not exhaust scheduler placements or the interleavings inside
-fan-out.
+`freeRunning.outcomes` is closed under chunk prefix, so membership alone can accept a consumer that
+never takes another enabled pull. The driver now uses `terminalOutcomes` for a consumer that exits
+naturally or is parked after 16 stable yields; subscribers interrupted by an explicit
+`unsubscribe` label retain ordinary prefix membership. Terminal runs passed/reached were 25/25 on
+both interpreters for every trace except `sa-accounting` (0/0 because both subscribers are
+explicitly interrupted). Memory also passed 25/25 for `sa-replay-lag`; live reached terminal state
+in 25/25 but passed model terminal membership in 0/25.
+
+Every live seed 731800–731824 produced the same outside history for `sa-replay-lag`:
+`[[Entry 1, Failed(ConsumerLagged, lastDeliveredSequence = 1)]]`. It is adjudicated as the expected
+class-(a) live replay-through-queue divergence already recorded by the gated rows, not as a memory
+class-A4 finding. The history is declared once in the finding-linked `freeRunning` section of
+`live-overrides-subscriber.json`; the driver asserts both that link and exact membership in the
+recorded live set. No memory history fell outside either applicable set. The sampled yields exposed
+multiple accepted lag/resume histories and more memory than live chunk placements for `sa-drain`;
+they do not exhaust scheduler placements or interleavings inside fan-out.

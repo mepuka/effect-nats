@@ -80,6 +80,97 @@
           "counts": "unobservable"
         }
       }
+    },
+    "sa-replay-lag": {
+      "steps": {
+        "4": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "events": [
+            {
+              "_tag": "Entry",
+              "message": {
+                "subject": "$KV.b.k",
+                "sequence": "1",
+                "payload": "v1",
+                "headers": [],
+                "timestampMillis": 1
+              }
+            },
+            {
+              "_tag": "Failed",
+              "error": {
+                "_tag": "ConsumerLagged",
+                "stream": "KV_b",
+                "lastDeliveredSequence": "1"
+              }
+            }
+          ],
+          "counts": "unobservable"
+        },
+        "6": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "7": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "events": []
+        },
+        "8": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "events": []
+        }
+      },
+      "finalObserved": {
+        "finding": "docs/research/lean-trace-live-findings.md",
+        "events": [
+          {
+            "id": 0,
+            "events": [
+              {
+                "_tag": "Entry",
+                "message": {
+                  "subject": "$KV.b.k",
+                  "sequence": "1",
+                  "payload": "v1",
+                  "headers": [],
+                  "timestampMillis": 1
+                }
+              },
+              {
+                "_tag": "Failed",
+                "error": {
+                  "_tag": "ConsumerLagged",
+                  "stream": "KV_b",
+                  "lastDeliveredSequence": "1"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "freeRunning": {
+        "0": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "histories": [
+            [
+              [
+                {
+                  "_tag": "Entry",
+                  "sequence": "1"
+                },
+                {
+                  "_tag": "Failed",
+                  "error": {
+                    "_tag": "ConsumerLagged",
+                    "stream": "KV_b",
+                    "lastDeliveredSequence": "1"
+                  }
+                }
+              ]
+            ]
+          ]
+        }
+      }
     }
   }
 }
