@@ -55,6 +55,40 @@ Cover:
   request failure, Core message-loss exposure, and interruption;
 - Core publish uncertainty across disconnect without claiming acknowledgement.
 
+## JetStream substrate tests
+
+Placement is an evidence-tier decision (`test/AGENTS.md`). A case goes in the shared suite only
+when both interpreters must satisfy it — "anything observable only on one implementation stays in
+that implementation's file" (`test/JetStreamConformance.ts:35-39`). Memory-only observations belong
+in `test/JetStreamMemory.test.ts`, live-only in `test/JetStreamLive.test.ts`.
+
+Cover:
+
+- interleavings pinned with `Deferred`, never with a sleep or a yield count: block the consumer's
+  callback on a gate, publish into the known buffer state, then open the gate, the way C13 does
+  (`test/JetStreamConformance.ts:336-371`);
+- registration witnessed before production — publish to a fresh consumer only after observing
+  `CaughtUp` (`test/JetStreamConformance.ts:356-357`), because the `Stream.unwrap` setup runs at
+  the consumer's first pull;
+- what the consumer observes before a terminal failure, not only the failure itself; a callback
+  that discards entries cannot establish delivery order;
+- the parameters at which the interpreters differ, each either rejected at the boundary or tested
+  one-sided: a zero or non-integer `ConsumeBuffer.messages`, and a `TerminateOnLag` buffer smaller
+  than the replayed history (live replay enters the subscription queue and can lag; memory
+  snapshot replay cannot). The suite's `roomy = TerminateOnLag 4096`
+  (`test/JetStreamConformance.ts:17-19`) hides both, so a case using it establishes nothing about
+  either;
+- memory-interpreter property tests derived from the frozen Lean theorem list: stored sequences
+  strictly increase and stay below `nextSequence`; a positive limit bounds every subject's view; a
+  publish makes the published subject's view `keepLatest(limit, prior ++ [new])` and leaves every
+  other subject's view unchanged; a compare-and-set succeeds exactly when the expected value
+  equals the subject's last sequence, and `0` exactly when that subject is empty. Take the exact
+  statements from `../Foldable/formal/effect_nats_substrate/docs/signature-snapshot.md`.
+
+Trace status: the Lean package holds three kernel-checked worked traces and there is no TypeScript
+JSONL replay bridge. Until one exists, report Lean theorem acceptance and TypeScript test results
+as separate evidence, and do not describe either as refining the other.
+
 ## KV tests
 
 Cover:

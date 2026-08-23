@@ -20,7 +20,7 @@
         "vitest": "4.1.11",
       },
     },
-    "packages/agents": {
+    "packages/agent": {
       "name": "effect-nats-agents",
       "version": "0.1.0",
       "dependencies": {
@@ -262,7 +262,7 @@
 
     "effect": ["effect@4.0.0-rc.111", "", { "dependencies": { "@standard-schema/spec": "^1.1.0", "fast-check": "^4.9.0", "msgpackr": "^2.0.5" } }, "sha512-ASd5L58EIR0CUNueZNKKjSsyOCd+2alxOAIaTcHaqkJkPsaYSsw5Cg/cfANk5K4Jr2YsX756xvX11shzqsreWA=="],
 
-    "effect-nats-agents": ["effect-nats-agents@workspace:packages/agents"],
+    "effect-nats-agents": ["effect-nats-agents@workspace:packages/agent"],
 
     "es-module-lexer": ["es-module-lexer@2.3.2", "", {}, "sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw=="],
 

@@ -36,7 +36,9 @@ Other load-bearing facts:
 - `PubSub.sliding(capacity)` / `bounded` / `dropping`; per-subscriber
   streams via `Stream.fromSubscription` after `PubSub.subscribe` (scoped).
 - `Queue.bounded/dropping/sliding/unbounded<A, E>`; end-capable queues take
-  `Cause.Done` in E; `Stream.fromQueue` strips it.
+  `Cause.Done` in E; `Stream.fromQueue` strips it. `bounded(n)` alone means
+  `strategy: "suspend"` — see "What the runtime decides" below for what that
+  and every other queue/scope default actually do.
 - `Effect.catchDefect` for defects; `Cause.hasInterruptsOnly(cause)` to let
   pure interruption through while translating real defects.
 - Filters: `Stream.filterMap` takes `(a) => Result<B, X>` — any
@@ -58,6 +60,52 @@ Other load-bearing facts:
   library.
 - Error channels JOIN under `Stream.unwrap` / `mapEffect` — translate seam
   errors to domain errors at the seam.
+
+## What the runtime decides: Queue, Scope, Stream.unwrap, Semaphore (rc.111, cited)
+
+Paths are `node_modules/effect/src/…`. Record these as named assumptions before modelling a
+protocol over Streams — they decide what your consumer observes.
+
+- **`bounded` names the bound, not the behavior at it.** `Queue.bounded(n)` is
+  `make({ capacity: n })` (`Queue.ts:500`); `make` defaults `strategy` to `"suspend"`
+  (`Queue.ts:448-468`).
+- **A parked producer is not an error.** `offer` on a non-`Open` queue returns `false` without
+  failing; at capacity under `"suspend"` it parks the fiber as a `Single` entry in `state.offers`
+  (`Queue.ts:645-668`, `:2002-2015`). Discarding `offer`'s boolean silently accepts "the consumer
+  was gone".
+- **`size` counts buffered items only** — `sizeUnsafe` is `messages.length`, `0` when `Done`
+  (`Queue.ts:1711`, `:1789`). An occupancy check never sees parked offerers.
+- **`fail` delivers the buffer, then the error.** `failCauseUnsafe` finalizes at once only when
+  buffer and parked offers are both empty; otherwise the state becomes `Closing` and the buffer is
+  kept (`Queue.ts:872`, `:958-962`, `:1000-1015`). `takeUnsafe` returns the stored exit only when
+  `Done` and keeps dequeuing while `Closing` (`:1606-1613`); `releaseCapacity` finalizes a
+  `Closing` queue only once buffer and offers are empty, and otherwise re-admits parked offers up
+  to capacity, resuming each with `true` (`:2037-2069`).
+- **`shutdown` discards the buffer** and resumes every parked `Single` offer with `false` — no
+  error, no interruption (`Queue.ts:1191-1210`, constants `:1950-1953`). `Queue.interrupt` is a
+  different operation: `failCause` with an interrupt cause (`:1153-1154`).
+- **One `Stream.fromQueue` pull drains the whole buffer.** `fromQueue` → `Channel.fromQueueArray`
+  → `Queue.takeAll` = `takeBetween(1, +∞)`; `takeBetweenUnsafe` takes
+  `MutableList.takeN(messages, max)` (clamped to the buffer length), then releases capacity
+  (`Stream.ts:1132-1133`, `Channel.ts:1229-1231`, `Queue.ts:1297-1298`, `:1426-1433`,
+  `:1977-1998`, `MutableList.ts:418-425`). Pull count is not message count; occupancy drops to
+  `0`, not by one, and parked offers are re-admitted in the same step.
+- **The consumer never runs inside the producer's critical section.** Taker wake-up after an offer
+  is `dispatcher.scheduleTask(…, 0)` (`Queue.ts:1969-1975`); who pulls when is scheduler-chosen.
+- **`capacity <= 0` has its own paths** (`Queue.ts:654-658`, `:1614-1620`, `:1986-1993`).
+  `bounded(0)` is a rendezvous — reject a `0` capacity at the boundary instead of letting a
+  sentinel reach it.
+- **Scope releases run LIFO.** `acquireRelease` stores the release in the scope's
+  insertion-ordered finalizer `Map` (`internal/effect.ts:3942-3958`, `:3863-3873`); close walks it
+  backwards (`:3802-3823`, loop at `:3811`), sequentially by default (`:3886-3891`).
+- **`Stream.unwrap`'s setup runs at the first pull.** `unwrap` is `Channel.unwrap`
+  (`Stream.ts:1633-1635`), which runs the effect with the channel's scope provided and memoizes
+  the pull (`Channel.ts:9039-9052`). Holding the stream value proves nothing was registered.
+- **`Effect.forEach` is sequential by default** — `concurrency` defaults to `1` and dispatches to
+  `forEachSequential` (`internal/effect.ts:4645-4653`, `:4677-4700`).
+- **A parked fiber keeps its permit.** `Semaphore.withPermits(n)` runs the body after `taken += n`
+  and releases in an exit handler around the body (`Semaphore.ts:287-307`; `withPermit` is
+  `withPermits(1)`, `:309`). A suspension inside a critical section extends the critical section.
 
 ## effect/testing
 

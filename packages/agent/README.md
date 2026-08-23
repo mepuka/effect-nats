@@ -46,13 +46,21 @@ servers and zero wall-clock sleeps.
 ## Layout
 
 ```
-src/agents/protocol/   wire-contract model: subjects, envelope, reply DFA, validation
-src/agents/            Wire seam, prompt engine, AgentClient, AgentHost, errors
+src/protocol/protocol/ wire-contract model: subjects, envelope, reply DFA, validation
+src/protocol/          Wire seam, prompt engine, AgentClient, AgentHost, errors
 src/core/              closed-world subject algebra + schema registry
 src/test/              property, model-based, TestClock, loopback, memory suites
 docs/upstream/         vendored protocol spec (byte-pinned)
 docs/conformance/      requirement catalog driving the strict gate
 ```
+
+## Effect AI bridge
+
+The proposed [Effect AI bridge development specification](docs/04-EFFECT-AI-BRIDGE.md) defines two
+Layer adapters: serving a pinned Effect v4 `LanguageModel` through `AgentHost`, and presenting a
+discovered remote agent as a `LanguageModel`. The first profile is intentionally text-only; tools,
+structured output, attachments, and caller queries require explicit mappings rather than lossy
+defaults.
 
 ## Developing
 

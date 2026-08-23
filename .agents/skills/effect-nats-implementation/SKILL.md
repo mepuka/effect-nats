@@ -17,7 +17,12 @@ the pinned Effect v4 tree. Treat this skill as a change gate, not a source of pr
    - `docs/research/official-effect-client-patterns.md` for first-party Effect analogues;
    - `docs/research/nats-js-reference.md` for official NATS behavior;
    - `docs/research/effect-native-client-architecture.md` for this repository's architecture;
-   - `docs/research/ecosystem-survey.md` only for comparative evidence.
+   - `docs/research/ecosystem-survey.md` only for comparative evidence;
+   - for any consume, resume, or buffer change:
+     `docs/architecture/adr-0008-consume-resume-and-buffer-semantics.md` and
+     `docs/architecture/consume-resume-and-buffer-semantics-brief.md`, plus
+     `../Foldable/formal/effect_nats_substrate/AGENTS.md` and its
+     `docs/signature-snapshot.md` when the sequential JetStream core is touched.
 4. Read [references/testing-gates.md](references/testing-gates.md) before adding or changing tests,
    lifecycle, concurrency, retry, streaming, KV, or Object Store behavior.
 5. For feature, fix, stream, lifecycle, or integration-test work, invoke the repository-local
@@ -139,6 +144,31 @@ alone.
 - Reconnect performs a fresh handshake and restores subscriptions. In-flight requests fail, and
   inbound or outbound Core messages may be lost; reconnect must not strengthen delivery semantics.
 
+### 3b. JetStream substrate gate
+
+Applies to `src/internal/JetStream*.ts`, `src/internal/Kv.ts`, and their evidence.
+
+- The sequential core — `createStream`, `getStream`, `deleteStream`, `publish`,
+  `lastMessageForSubject` — is a semantic declaration mechanized in
+  `../Foldable/formal/effect_nats_substrate/`. Changing those operations' observable
+  behavior is a declaration change under workspace law 2, and the package's `AGENTS.md`
+  requires re-diffing the transliteration against its pin and reopening the affected proofs.
+- The consume surface is runtime-coupled instead. For every buffer policy, state what is
+  admitted, what one pull drains, what is discarded, and what is reported — against the cited
+  facts in `effect4-stream-discipline`'s api-notes, not from memory: `fail` delivers the
+  buffer and then the error, `shutdown` discards the buffer and wakes a parked producer with
+  `false`, and one `Stream.fromQueue` pull drains everything buffered.
+- `CaughtUp` is the registration witness. `Stream.unwrap` runs its setup at the consumer's
+  first pull, so publish to a fresh consumer only after observing it
+  (`test/JetStreamConformance.ts:356-357`).
+- On the memory interpreter a full `PullWindow` suspends `publish` while it holds the
+  interpreter's single permit, stalling every operation on every stream. That is documented
+  behavior (`src/internal/JetStream.ts:43-55`) pinned by a memory-only test
+  (`test/JetStreamMemory.test.ts:125-176`) — not a bug to fix in passing.
+- Resume position, `lastDeliveredSequence`, and buffer-capacity validity are fixed by ADR-0008
+  and its brief. Read them before choosing behavior in that area, and do not encode a default
+  for anything they leave open.
+
 ### 4. Error and retry gate
 
 - Decode untrusted structured boundaries and parse wire bytes with explicit size limits.
@@ -192,6 +222,7 @@ alone.
    - pinned Effect analogue inspected;
    - modules selected and rejected;
    - lifecycle and buffer policy;
+   - the semantic declaration or formal obligation the change discharges, and what stays open;
    - tests run and server versions observed;
    - assumptions, untested claims, and remaining risks.
 
@@ -205,6 +236,8 @@ Stop and request a design decision when:
 - no accepted ADR permits the requested public contract;
 - NATS and Effect analogues imply incompatible semantics;
 - queue capacity or overflow behavior is unknowable from the contract;
+- a consume, resume, or buffer behavior is not fixed by ADR-0008, its brief, or another
+  accepted decision;
 - the unresolved wrap/fork/wire or callback/async-iterator choice changes whether the producer can
   suspend or where buffering occurs;
 - retry safety depends on an unstated idempotency guarantee;
