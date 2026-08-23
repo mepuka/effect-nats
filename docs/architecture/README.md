@@ -38,6 +38,8 @@ Draft workbench material (not decisions):
 - [Object Store slice scoping](object-store-slice-scoping.md)
 - [Lean trace replay brief](lean-trace-replay-brief.md)
 - [Live-adapter observation fidelity brief](live-adapter-observation-fidelity-brief.md)
+- [Lean subscriber-trace replay brief](lean-subscriber-trace-replay-brief.md) — draft, not dispatched
+- [Test hardening brief](test-hardening-brief.md) — draft, not dispatched
 
 Research evidence (not decisions):
 
