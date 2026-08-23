@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "traces": {
+    "positive": {
+      "steps": {
+        "1": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "outcome": {
+            "ok": {
+              "_tag": "config",
+              "config": {
+                "name": "KV_b",
+                "subjects": ["$KV.b.>"],
+                "maxMessagesPerSubject": -1,
+                "allowRollup": true
+              }
+            }
+          }
+        },
+        "4": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "outcome": {
+            "ok": {
+              "_tag": "message",
+              "message": {
+                "subject": "$KV.b.k",
+                "sequence": "2",
+                "payload": "h2",
+                "headers": [["Nats-Expected-Last-Subject-Sequence", "1"]],
+                "timestampMillis": 200
+              }
+            }
+          }
+        }
+      },
+      "views": {}
+    },
+    "cas": {
+      "steps": {
+        "5": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "outcome": {
+            "ok": {
+              "_tag": "message",
+              "message": {
+                "subject": "$KV.b.k",
+                "sequence": "3",
+                "payload": "v2",
+                "headers": [["Nats-Expected-Last-Subject-Sequence", "1"]],
+                "timestampMillis": 4
+              }
+            }
+          }
+        }
+      },
+      "views": {}
+    }
+  }
+}

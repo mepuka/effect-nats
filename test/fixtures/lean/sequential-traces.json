@@ -1,0 +1,414 @@
+{"traces":
+ [{"views":
+   [{"subject": "$KV.b.k", "stream": "KV_b", "payloads": ["h1", "h2"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op": {"op": "getStream", "name": "KV_b"},
+     "expect":
+     {"ok":
+      {"config":
+       {"subjects": ["$KV.b.>"],
+        "name": "KV_b",
+        "maxMessagesPerSubject": 0,
+        "allowRollup": true},
+       "_tag": "config"}}},
+    {"op":
+     {"timestampMillis": 100,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "h1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 200,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "h2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": "1"},
+     "expect": {"ok": {"sequence": "2", "_tag": "sequence"}}},
+    {"op":
+     {"subject": "$KV.b.k", "stream": "KV_b", "op": "lastMessageForSubject"},
+     "expect":
+     {"ok":
+      {"message":
+       {"timestampMillis": 200,
+        "subject": "$KV.b.k",
+        "sequence": "2",
+        "payload": "h2",
+        "headers": []},
+       "_tag": "message"}}}],
+   "name": "positive",
+   "modelOnlySteps": 0,
+   "mirrors": ["C1", "C3", "C4"]},
+  {"views": [{"subject": null, "stream": "KV_b", "payloads": []}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 5,
+       "allowRollup": true}},
+     "expect": {"error": {"stream": "KV_b", "_tag": "StreamConfigConflict"}}},
+    {"op":
+     {"timestampMillis": 0,
+      "subject": "$KV.other.k",
+      "stream": "KV_b",
+      "payload": "h",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect":
+     {"error":
+      {"subject": "$KV.other.k", "stream": "KV_b", "_tag": "SubjectNotBound"}}},
+    {"op":
+     {"timestampMillis": 0,
+      "subject": "$KV.nope.k",
+      "stream": "KV_nope",
+      "payload": "x",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"error": {"stream": "KV_nope", "_tag": "StreamNotFound"}}},
+    {"op": {"op": "getStream", "name": "KV_nope"},
+     "expect": {"error": {"stream": "KV_nope", "_tag": "StreamNotFound"}}},
+    {"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}}],
+   "name": "rejected",
+   "modelOnlySteps": 1,
+   "mirrors": ["C1", "C2"]},
+  {"views":
+   [{"subject": "$KV.p.k", "stream": "KV_p", "payloads": ["v2", "v3"]},
+    {"subject": null, "stream": "KV_p", "payloads": ["v2", "v3"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.p.>"],
+       "name": "KV_p",
+       "maxMessagesPerSubject": 2,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.p.k",
+      "stream": "KV_p",
+      "payload": "v1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.p.k",
+      "stream": "KV_p",
+      "payload": "v2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "2", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 3,
+      "subject": "$KV.p.k",
+      "stream": "KV_p",
+      "payload": "v3",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "3", "_tag": "sequence"}}},
+    {"op":
+     {"subject": "$KV.p.k", "stream": "KV_p", "op": "lastMessageForSubject"},
+     "expect":
+     {"ok":
+      {"message":
+       {"timestampMillis": 3,
+        "subject": "$KV.p.k",
+        "sequence": "3",
+        "payload": "v3",
+        "headers": []},
+       "_tag": "message"}}},
+    {"op":
+     {"subject": "$KV.p.none", "stream": "KV_p", "op": "lastMessageForSubject"},
+     "expect":
+     {"error":
+      {"subject": "$KV.p.none",
+       "stream": "KV_p",
+       "_tag": "NoMessageForSubject"}}}],
+   "name": "prune",
+   "modelOnlySteps": 0,
+   "mirrors": ["C5", "C4"]},
+  {"views":
+   [{"subject": "$KV.b.k", "stream": "KV_b", "payloads": ["purged"]},
+    {"subject": "$KV.b.other", "stream": "KV_b", "payloads": ["keep"]},
+    {"subject": null, "stream": "KV_b", "payloads": ["keep", "purged"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.b.other",
+      "stream": "KV_b",
+      "payload": "keep",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "2", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 3,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "purged",
+      "op": "publish",
+      "headers": [["Nats-Rollup", "sub"]],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "3", "_tag": "sequence"}}},
+    {"op":
+     {"subject": "$KV.b.k", "stream": "KV_b", "op": "lastMessageForSubject"},
+     "expect":
+     {"ok":
+      {"message":
+       {"timestampMillis": 3,
+        "subject": "$KV.b.k",
+        "sequence": "3",
+        "payload": "purged",
+        "headers": [["Nats-Rollup", "sub"]]},
+       "_tag": "message"}}}],
+   "name": "rollup",
+   "modelOnlySteps": 0,
+   "mirrors": ["C6"]},
+  {"views": [{"subject": "$KV.x.k", "stream": "KV_x", "payloads": ["v"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.x.>"],
+       "name": "KV_x",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": false}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.x.k",
+      "stream": "KV_x",
+      "payload": "v",
+      "op": "publish",
+      "headers": [["Nats-Rollup", "sub"]],
+      "expectedLastSubjectSequence": null},
+     "expect": {"error": {"stream": "KV_x", "_tag": "RollupNotPermitted"}}},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.x.k",
+      "stream": "KV_x",
+      "payload": "v",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}}],
+   "name": "rollup-denied",
+   "modelOnlySteps": 0,
+   "mirrors": ["C6"]},
+  {"views":
+   [{"subject": "$KV.b.k", "stream": "KV_b", "payloads": ["v1", "v2"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": "0"},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": "0"},
+     "expect":
+     {"error":
+      {"subject": "$KV.b.k",
+       "stream": "KV_b",
+       "expected": "0",
+       "actual": "1",
+       "_tag": "WrongLastSequence"}}},
+    {"op":
+     {"timestampMillis": 3,
+      "subject": "$KV.b.other",
+      "stream": "KV_b",
+      "payload": "x",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "2", "_tag": "sequence"}}},
+    {"op":
+     {"timestampMillis": 4,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": "1"},
+     "expect": {"ok": {"sequence": "3", "_tag": "sequence"}}},
+    {"op":
+     {"subject": "$KV.b.k", "stream": "KV_b", "op": "lastMessageForSubject"},
+     "expect":
+     {"ok":
+      {"message":
+       {"timestampMillis": 4,
+        "subject": "$KV.b.k",
+        "sequence": "3",
+        "payload": "v2",
+        "headers": []},
+       "_tag": "message"}}}],
+   "name": "cas",
+   "modelOnlySteps": 0,
+   "mirrors": ["C3"]},
+  {"views": [{"subject": "$KV.d.k", "stream": "KV_d", "payloads": ["x2"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.d.>"],
+       "name": "KV_d",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.d.k",
+      "stream": "KV_d",
+      "payload": "x1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}},
+    {"op": {"op": "deleteStream", "name": "KV_d"},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op": {"op": "getStream", "name": "KV_d"},
+     "expect": {"error": {"stream": "KV_d", "_tag": "StreamNotFound"}}},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.d.k",
+      "stream": "KV_d",
+      "payload": "x2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"error": {"stream": "KV_d", "_tag": "StreamNotFound"}}},
+    {"op": {"op": "deleteStream", "name": "KV_d"},
+     "expect": {"error": {"stream": "KV_d", "_tag": "StreamNotFound"}}},
+    {"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.d.>"],
+       "name": "KV_d",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 3,
+      "subject": "$KV.d.k",
+      "stream": "KV_d",
+      "payload": "x2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}}],
+   "name": "delete-recreate",
+   "modelOnlySteps": 0,
+   "mirrors": ["C10"]},
+  {"views": [{"subject": null, "stream": "KV_o", "payloads": ["y"]}],
+   "steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.o.a.>", "$KV.o.b.>"],
+       "name": "KV_o",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.o.b.>", "$KV.o.a.>"],
+       "name": "KV_o",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"error": {"stream": "KV_o", "_tag": "StreamConfigConflict"}}},
+    {"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.o.a.>", "$KV.o.b.>"],
+       "name": "KV_o",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "expect": {"ok": {"_tag": "unit"}}},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.o.b.k",
+      "stream": "KV_o",
+      "payload": "y",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}}}],
+   "name": "config-order",
+   "modelOnlySteps": 0,
+   "mirrors": ["C1"]}],
+ "snapshot": "r2.1",
+ "schema": 1,
+ "producer": "EffectNatsSubstrate",
+ "pin": "d06223f",
+ "foldableCommit": "ef5c3ebe1157",
+ "compare": {"ignore": ["timestampMillis"]}}

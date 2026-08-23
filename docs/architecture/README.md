@@ -35,3 +35,8 @@ Draft workbench material (not decisions):
 - [ADR-0001 implementation and conformance status](adr-0001-conformance-status.md)
 - [KV slice scoping](kv-slice-scoping.md)
 - [Object Store slice scoping](object-store-slice-scoping.md)
+- [Lean trace replay brief](lean-trace-replay-brief.md)
+
+Research evidence (not decisions):
+
+- [Lean sequential-trace live replay findings](../research/lean-trace-live-findings.md)
