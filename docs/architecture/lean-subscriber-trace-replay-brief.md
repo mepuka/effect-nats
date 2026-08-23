@@ -1,9 +1,8 @@
 # Brief: replay the Lean model's subscriber traces against both JetStream interpreters
 
-Status: brief, 2026-08-23 — draft workbench material, **not yet dispatched**. It becomes
-dispatchable when the Foldable exporter emits the schema-2 fixture (lanes plan L0) and decisions P1
-and P2 of `../../../Foldable/research/2026-08-23-effect-nats-lanes-plan.md` are ratified; the
-producer commit is then filled into the Pin line and the brief is immutable. Closes the bridge
+Status: brief, 2026-08-23 — draft workbench material, **dispatched 2026-08-23; immutable**.
+Decisions P1 and P2 of `../../../Foldable/research/2026-08-23-effect-nats-lanes-plan.md` are
+ratified and the Foldable exporter emits schema 2 at the commit in the Pin line. Closes the bridge
 extension of slice 4 (`../../../Foldable/research/2026-08-22-effect-nats-lean-slices-plan.md`,
 slice-4 row; obligations EXT1/EXT2 and A4 in
 `../../../Foldable/research/2026-08-22-subscriber-stage-a.md` §13 `:496-499`; fixture schema in
@@ -15,8 +14,9 @@ receipt. Any reasoning about the Lean model itself goes through the Lean systems
 supports.
 
 Pin: every `path:line` below is at `bec02ac` (HEAD `a9157ef` differs only under `skills/`).
-Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `c11f652`; the fixture's
-`foldableCommit` is filled in at dispatch.
+Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `0c11860`, the commit whose exporter
+produces the fixture: extend `scripts/lean-traces.sh` (item 7), run it from this checkout with
+`../Foldable` at that commit, and commit the output (`foldableCommit` is the full hash).
 
 ## What exists
 
@@ -70,17 +70,23 @@ Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `c11f652`; the fixt
   | `"pull"`        | `id`, `events`, `counts`                                                                                           | `Label.pull`                      |
   | `"unsubscribe"` | `id`, `counts`                                                                                                     | `Label.unsubscribe`               |
 
-  `events` is the exact list the label appends to the subscriber's `observed`, each
-  `{"_tag": "entry", "message": …}` (schema-1 message shape), `{"_tag": "caughtUp"}`, or
-  `{"_tag": "failed", "error": {"_tag": "StreamNotFound", "stream"}}` /
-  `{"_tag": "failed", "error": {"_tag": "ConsumerLagged", "stream", "lastDelivered"}}`. `counts` is
-  a list of `[stream, n]` pairs to check against `subscriberCount` after the label (empty when the
-  model records none). `finalObserved` is a list of `{id, events}` — every subscriber's complete
-  `observed` list at the end. `freeRunning.outcomes` is an object `id → [summary, …]`: the set of
-  final `observed` lists the model admits for that subscriber over _every_ placement of its pulls
-  (decision P1), each summary a list of `{"_tag": "entry", "sequence"}`, `{"_tag": "caughtUp"}`,
-  or the `failed` object above. Key order in the file is not meaningful (`Lean.Json` orders keys by
-  string).
+  `events` is the exact list the label appends to the subscriber's `observed`, each an event in
+  the seam's vocabulary: `{"_tag": "Entry", "message": …}` (schema-1 message shape),
+  `{"_tag": "CaughtUp"}`, or `{"_tag": "Failed", "error": …}` with the error
+  `{"_tag": "StreamNotFound", "stream"}` or `{"_tag": "ConsumerLagged", "stream",
+  "lastDeliveredSequence"}` (the seam's field, `src/internal/JetStream.ts:130-133`; a decimal
+  string). `counts` is a list of `[stream, n]` pairs to check against `subscriberCount` after the
+  label (empty when the model records none). `finalObserved` is a list of `{id, events}` — every
+  subscriber's complete `observed` list at the end. `freeRunning.outcomes` is an object
+  `id → [history, …]`: the set of consumer **histories** the model admits for that subscriber over
+  every placement of its pulls (decision P1). A history is a list of chunks — the registration
+  prefix first, then one chunk per pull, each chunk the events that pull yielded — with summary
+  events `{"_tag": "Entry", "sequence"}`, `{"_tag": "CaughtUp"}`, or the `Failed` object above.
+  Histories rather than final lists: final `observed` lists do not discriminate a wrong queue model
+  (W1's one-element pull reaches final lists on `sa-drain` that the model also reaches); chunk
+  histories do, and the package proves `gated_in_outcomes`, `w1_outside_outcomes`, and
+  `w2_outside_outcomes` by `decide` (Foldable `EffectNatsSubstrate/SubPlacements.lean`). Key
+  order in the file is not meaningful (`Lean.Json` orders keys by string).
 
 ## Tests to write
 
@@ -101,7 +107,7 @@ Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `c11f652`; the fixt
      observed list equals `events` (replay entries then `caughtUp`); if the fiber fails before that,
      the failure is the observation (for a `register` whose `expect` is an error, assert it). Then
      check `counts`. A consumer fiber that exits with `ConsumerLagged` or `StreamNotFound` is not a
-     test error: the harness records the exit as the event `{"_tag": "failed", "error": …}` on that
+     test error: the harness records the exit as the event `{"_tag": "Failed", "error": …}` on that
      subscriber, because the model observes the error on the pull after the buffer is drained
      (`pullStep`, Foldable `Next.lean:75-87`: `done e` pulls to `[failed e]`; `closing e` drains first
      and becomes `done e`). `lastEnqueued` is not an input to `consume`; it is the model's record of what
@@ -114,7 +120,7 @@ Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `c11f652`; the fixt
      `pull` label is active has broken the model's "never pulls otherwise" rule, and a pull on an
      empty queue would suspend and silently take the next publish — the gate must be awaited
      _before_ every queue pull after `CaughtUp`, never only after a delivery. A `pull` whose `events`
-     is `[failed …]` is realised the same way: the release lets the stream pull once more, the queue
+     is `[Failed …]` is realised the same way: the release lets the stream pull once more, the queue
      yields its failure, the fiber exits, and the harness records the `failed` event.
    - **`unsubscribe`**: interrupt the consumer fiber and await its exit, then check `counts`.
    - **End of trace**: compare every subscriber's observed list with `finalObserved` (normalize
@@ -152,8 +158,10 @@ Effect is `4.0.0-rc.111`. Foldable citations are at Foldable `c11f652`; the fixt
    drawn from a seeded `FastCheck` generator over `0..3`. After the last label, wait until every
    consumer fiber has exited or its observed list has been stable across 16 consecutive yields, then
    interrupt the survivors. Assert, per subscriber, that the summary of its observed list is a
-   member of `freeRunning.outcomes[id]` (compare after normalize; summaries carry sequences, not
-   payloads). Record the seed of every run. An observed list outside the set is a **finding of class
+   member of `freeRunning.outcomes[id]`: the history is the list of chunks the consumer received
+   after `CaughtUp` was observed, prefixed by the registration chunk (everything up to and
+   including `CaughtUp`), each event reduced to its summary (sequence / `CaughtUp` / the `Failed`
+   error); compare after normalize. Record the seed of every run. An observed list outside the set is a **finding of class
    A4**: log it with the seed, the trace, and the full observed list in the findings section; it
    blocks the receipt until adjudicated as a harness artefact (fixed in the harness, never in
    `src/`) or a genuine interleaving, which is the result this mode exists to produce. Coverage of
