@@ -128,3 +128,23 @@ it.effect("an official callback error fails the stream with its preserved cause"
       expect(harness.unsubscribeCalls()).toBe(1)
     })
   ))
+
+it.effect("registration failure is typed and preserves the official cause", () =>
+  Effect.scoped(
+    Effect.gen(function*() {
+      const cause = new Error("subscription registration failed")
+      const connection: CoreSubscription.Connection<number> = {
+        subscribe: () => {
+          throw cause
+        }
+      }
+
+      const failure = yield* Effect.flip(
+        CoreSubscription.make(connection, { subject: "orders.created", capacity: 8 })
+      )
+
+      expect(failure._tag).toBe("ConnectionClosedError")
+      expect(failure.operation).toBe("Core.subscribe/register")
+      expect(failure.cause).toBe(cause)
+    })
+  ))

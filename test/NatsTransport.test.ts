@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest"
-import { Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Effect, Exit, Fiber, Latch, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { layerTransport, NatsTransport } from "../src/internal/NatsTransport.ts"
 import { makeFakeConnection } from "./Kit.ts"
@@ -21,6 +21,38 @@ it.effect("closing the layer drains and closes the underlying connection once", 
     yield* Effect.scoped(
       NatsTransport.use(() => Effect.void).pipe(Effect.provide(layer))
     )
+    expect(fake.observed.drainCalls).toBe(1)
+    expect(fake.observed.closeCalls).toBe(1)
+  }))
+
+it.effect("layer release drains and closes after use failure", () =>
+  Effect.gen(function*() {
+    const fake = yield* makeFakeConnection()
+    const failure = yield* Effect.flip(
+      Effect.scoped(
+        NatsTransport.use(() => Effect.fail("use failed")).pipe(
+          Effect.provide(layerTransport(fake.connection))
+        )
+      )
+    )
+    expect(failure).toBe("use failed")
+    expect(fake.observed.drainCalls).toBe(1)
+    expect(fake.observed.closeCalls).toBe(1)
+  }))
+
+it.effect("layer release drains and closes after use interruption", () =>
+  Effect.gen(function*() {
+    const fake = yield* makeFakeConnection()
+    const entered = yield* Latch.make()
+    const use = yield* Effect.scoped(
+      NatsTransport.use(() => entered.open.pipe(Effect.andThen(Effect.never))).pipe(
+        Effect.provide(layerTransport(fake.connection))
+      )
+    ).pipe(Effect.forkChild)
+    yield* entered.await
+
+    yield* Fiber.interrupt(use)
+
     expect(fake.observed.drainCalls).toBe(1)
     expect(fake.observed.closeCalls).toBe(1)
   }))

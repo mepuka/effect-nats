@@ -111,9 +111,9 @@ it.effect("overflow drains admitted values before the terminal error; the trigge
     expect(outcome._tag).toBe("SlowConsumerError")
   }))
 
-it.effect("non-positive and fractional capacities are construction defects", () =>
+it.effect("non-positive, non-finite, and fractional capacities are construction defects", () =>
   Effect.gen(function*() {
-    for (const capacity of [0, -1, 1.5, Number.NaN]) {
+    for (const capacity of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       const exit = yield* Effect.exit(
         SubscriptionBridge.make<number>({ operation: "test", subject: "s", capacity })
       )
