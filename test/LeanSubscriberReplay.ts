@@ -1,11 +1,12 @@
 import { expect, it } from "@effect/vitest"
 import { Deferred, Effect, Exit, Fiber, Queue, Result, Schema, Stream } from "effect"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import type { ConsumerLagged, JetStream, StreamNotFound } from "../src/internal/JetStream.ts"
 import { ExpectedOutcome, Message, normalize, observeStep, Op } from "./LeanTraceReplay.ts"
 
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder()
+const findingsDocument = "docs/research/lean-trace-live-findings.md"
 
 const StartPosition = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("AllHistory") }),
@@ -97,6 +98,19 @@ export const SubscriberTraceFixture = Schema.Struct({
   compare: Schema.Struct({ ignore: Schema.Array(Schema.String) }),
   traces: Schema.Array(SubscriberTrace)
 })
+const SubscriberStepOverride = Schema.Struct({
+  finding: Schema.String,
+  outcome: Schema.optional(ExpectedOutcome),
+  events: Schema.optional(Schema.Array(SubscriberEvent)),
+  counts: Schema.optional(Schema.Literal("unobservable"))
+})
+const SubscriberTraceOverrides = Schema.Struct({
+  steps: Schema.Record(Schema.String, SubscriberStepOverride)
+})
+const SubscriberLiveOverrides = Schema.Struct({
+  schema: Schema.Literal(2),
+  traces: Schema.Record(Schema.String, SubscriberTraceOverrides)
+})
 
 export type FixtureSubscriberTrace = typeof SubscriberTrace.Type
 export type FixtureSubscriberStep = typeof SubscriberStep.Type
@@ -106,10 +120,20 @@ const fixtureInput: unknown = JSON.parse(readFileSync(fixtureUrl, "utf8"))
 export const subscriberTraceFixture = Result.getOrThrow(
   Schema.decodeUnknownResult(SubscriberTraceFixture)(fixtureInput)
 )
+const overridesUrl = new URL("./fixtures/lean/live-overrides-subscriber.json", import.meta.url)
+const subscriberLiveOverrides = existsSync(overridesUrl)
+  ? Result.getOrThrow(
+    Schema.decodeUnknownResult(SubscriberLiveOverrides)(
+      JSON.parse(readFileSync(overridesUrl, "utf8"))
+    )
+  )
+  : { schema: 2 as const, traces: {} }
 
 export interface SubscriberReplayService {
   readonly service: JetStream["Service"]
   readonly subscriberCount?: (stream: string) => Effect.Effect<number>
+  /** Live-only wire barrier: prior publishes reach callbacks before a modeled takeAll. */
+  readonly settleBeforePull?: Effect.Effect<void, unknown>
 }
 
 export type WithSubscriberService = <A, E>(
@@ -255,10 +279,15 @@ const armGate = (state: ConsumerState, context: string): Effect.Effect<void> =>
 const checkCounts = (
   target: SubscriberReplayService,
   counts: ReadonlyArray<readonly [string, number]>,
-  context: string
+  context: string,
+  override: typeof SubscriberStepOverride.Type | undefined
 ): Effect.Effect<void> =>
   target.subscriberCount === undefined
-    ? Effect.void
+    ? Effect.sync(() => {
+      if (counts.length > 0) {
+        expect(override?.counts, `${context}: live count override`).toBe("unobservable")
+      }
+    })
     : Effect.forEach(
       counts,
       ([stream, expected]) =>
@@ -272,27 +301,36 @@ const cleanup = (states: Iterable<ConsumerState>): Effect.Effect<void> =>
   Effect.forEach(states, (state) => Fiber.interrupt(state.fiber), { discard: true })
 
 const replayTrace = (
+  label: string,
   target: SubscriberReplayService,
   trace: FixtureSubscriberTrace
-): Effect.Effect<void> => {
+): Effect.Effect<void, unknown> => {
   const ignored = new Set(subscriberTraceFixture.compare.ignore)
   const states = new Map<number, ConsumerState>()
+  const overrides = label === "live" ? subscriberLiveOverrides.traces[trace.name] : undefined
   const program = Effect.gen(function*() {
     for (let index = 0; index < trace.steps.length; index++) {
       const step = trace.steps[index]
       if (step === undefined) continue
-      const context = `${trace.name} step ${index} (${step.label})`
+      const override = overrides?.steps[String(index)]
+      if (override !== undefined) {
+        expect(override.finding, `${trace.name} step ${index}: finding link`).toBe(findingsDocument)
+      }
+      const context = override === undefined
+        ? `${trace.name} step ${index} (${step.label})`
+        : `${trace.name} step ${index} (${step.label}); recorded in ${override.finding}`
       switch (step.label) {
         case "op": {
           const actual = yield* observeStep(target.service, step.op)
-          assertExpected(actual, step.expect, ignored, context)
-          yield* checkCounts(target, step.counts, context)
+          assertExpected(actual, override?.outcome ?? step.expect, ignored, context)
+          yield* checkCounts(target, step.counts, context, override)
           break
         }
         case "register": {
           const state = yield* startConsumer(target.service, step)
           states.set(step.id, state)
-          if ("error" in step.expect) {
+          const expectedOutcome = override?.outcome ?? step.expect
+          if ("error" in expectedOutcome) {
             yield* Fiber.await(state.fiber)
             const failed = state.observed.find((event) =>
               typeof event === "object" && event !== null && "_tag" in event
@@ -300,18 +338,29 @@ const replayTrace = (
             ) as { readonly error?: unknown } | undefined
             assertExpected(
               failed === undefined ? { error: state.unexpected } : { error: failed.error },
-              step.expect,
+              expectedOutcome,
               ignored,
               context
             )
           } else {
-            yield* waitForLength(state, step.events.length)
+            const expectedEvents = override?.events ?? step.events
+            yield* waitForLength(state, expectedEvents.length)
             expect(state.unexpected, `${context}: unexpected consumer failure`).toBeUndefined()
-            assertExpected(state.observed, step.events, ignored, `${context}: registration events`)
-            assertExpected({ ok: { _tag: "unit" } }, step.expect, ignored, context)
+            assertExpected(
+              state.observed,
+              expectedEvents,
+              ignored,
+              `${context}: registration events`
+            )
+            assertExpected(
+              { ok: { _tag: "unit" } },
+              expectedOutcome,
+              ignored,
+              context
+            )
             yield* armGate(state, context)
           }
-          yield* checkCounts(target, step.counts, context)
+          yield* checkCounts(target, step.counts, context, override)
           break
         }
         case "pull": {
@@ -321,9 +370,11 @@ const replayTrace = (
           const gate = state.gate
           expect(gate, `${context}: pull has one armed gate`).toBeDefined()
           if (gate === undefined) break
+          if (target.settleBeforePull !== undefined) yield* target.settleBeforePull
           state.gate = undefined
           const before = state.observed.length
-          const targetLength = before + step.events.length
+          const expectedEvents = override?.events ?? step.events
+          const targetLength = before + expectedEvents.length
           expect(yield* Deferred.succeed(gate.release, void 0), `${context}: release once`).toBe(
             true
           )
@@ -332,18 +383,18 @@ const replayTrace = (
           expect(state.observed.length, `${context}: exact event growth`).toBe(targetLength)
           assertExpected(
             state.observed.slice(before),
-            step.events,
+            expectedEvents,
             ignored,
             `${context}: pulled events`
           )
-          const terminal = step.events.some((event) => event._tag === "Failed")
+          const terminal = expectedEvents.some((event) => event._tag === "Failed")
           if (terminal) {
             yield* Fiber.await(state.fiber)
             expect(state.fiber.pollUnsafe(), `${context}: terminal fiber exit`).toBeDefined()
           } else {
             yield* armGate(state, context)
           }
-          yield* checkCounts(target, step.counts, context)
+          yield* checkCounts(target, step.counts, context, override)
           break
         }
         case "unsubscribe": {
@@ -353,7 +404,7 @@ const replayTrace = (
             yield* Fiber.interrupt(state.fiber)
             expect(state.fiber.pollUnsafe(), `${context}: interrupted fiber exit`).toBeDefined()
           }
-          yield* checkCounts(target, step.counts, context)
+          yield* checkCounts(target, step.counts, context, override)
           break
         }
       }
@@ -379,7 +430,7 @@ export const leanSubscriberReplay = (
   for (const trace of subscriberTraceFixture.traces) {
     it.effect(
       `${label}: lean subscriber trace ${trace.name} (mirrors ${trace.mirrors.join(", ")})`,
-      () => withService((target) => replayTrace(target, trace)),
+      () => withService((target) => replayTrace(label, target, trace)),
       timeout
     )
   }

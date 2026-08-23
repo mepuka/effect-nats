@@ -33,7 +33,12 @@ const withLive = <A, E>(
 
 conformance("live", (f) => withLive(f), 30_000)
 leanTraceReplay("live", withLive, 30_000)
-leanSubscriberReplay("live", (f) => withLive((service) => f({ service })), 30_000)
+leanSubscriberReplay(
+  "live",
+  (f) =>
+    withLive((service, nc) => f({ service, settleBeforePull: Effect.promise(() => nc.flush()) })),
+  30_000
+)
 
 const utf8 = new TextEncoder()
 const decoder = new TextDecoder()
