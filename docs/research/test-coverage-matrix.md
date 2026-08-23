@@ -101,3 +101,24 @@ semantic promise.
 - Assumed/open: current Core overflow ordering and unknown-connect retry classification remain
   accepted/design issues in `TO_FIX.md`; no test here resolves their authority. Server compatibility
   remains bounded to the versions and configurations recorded by the full lane gate.
+
+## Later hardening-item progress
+
+### Item 3 — live-tier preflight
+
+- `test/TestServer.test.ts` › `preflight names the required server and install step when the binary
+  is absent` exercises an unresolved executable and pins the actionable v2.14.5 install/PATH
+  diagnostic.
+- `test/TestServer.test.ts` › `preflight accepts the declared server and reports the integration
+  receipt` exercises the installed binary and pins server, JetStream/storage mode, actual test
+  runtime, client transport, and isolation fields.
+- Every `TestServer.startWith` now awaits the cached preflight before allocating a port or store.
+  Isolated Vitest workers coordinate the receipt line through an exclusive run marker keyed by the
+  runner parent, so one invocation prints one receipt even when several live test files run in
+  parallel.
+- Red/green receipt: the new preflight suite first failed 2/2 because the seam did not exist. Its
+  present-binary case then caught a false runtime label (`Bun unknown`); the receipt now reports the
+  actual Vitest runtime (`Node v22.23.2` in the witnessed run). Final focused gates: absent/present
+  preflight 2/2; all three live files 3 files / 49 tests, with exactly one receipt line for
+  `nats-server v2.14.5`, `@nats-io/transport-node 3.4.0`, per-fixture JetStream/storage, and
+  per-scope port/store cleanup.

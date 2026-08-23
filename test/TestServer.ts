@@ -1,8 +1,8 @@
 import { Data, Effect } from "effect"
 import type { Scope } from "effect"
-import { spawn } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import type { ChildProcess } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -31,6 +31,98 @@ export interface TestServerOptions {
     readonly keyFile: string
   } | undefined
 }
+
+export interface IntegrationReceipt {
+  readonly serverVersion: string
+  readonly jetStreamAndStorage: string
+  readonly clientRuntime: string
+  readonly clientTransport: string
+  readonly isolation: string
+}
+
+const requiredServerVersion = "v2.14.5"
+
+const installInstruction =
+  "Install v2.14.5 from https://github.com/nats-io/nats-server/releases/tag/v2.14.5 and add nats-server to PATH."
+
+const runVersionProbe = (binary: string): Promise<IntegrationReceipt> =>
+  new Promise((resolve, reject) => {
+    execFile(binary, ["--version"], { windowsHide: true }, (error, stdout, stderr) => {
+      if (error !== null) {
+        const code = (error as NodeJS.ErrnoException).code
+        const reason = code === "ENOENT"
+          ? `nats-server ${requiredServerVersion} is required for live tests, but "${binary}" was not found on PATH. ${installInstruction}`
+          : `nats-server ${requiredServerVersion} is required for live tests, but "${binary} --version" failed: ${error.message}. ${installInstruction}`
+        reject(new TestServerError({ reason }))
+        return
+      }
+      const output = `${stdout}\n${stderr}`.trim()
+      const serverVersion = output.match(/\bv\d+\.\d+\.\d+\b/)?.[0]
+      if (serverVersion !== requiredServerVersion) {
+        reject(
+          new TestServerError({
+            reason:
+              `nats-server ${requiredServerVersion} is required for live tests, but "${binary} --version" reported ${
+                JSON.stringify(output)
+              }. ${installInstruction}`
+          })
+        )
+        return
+      }
+      resolve({
+        serverVersion,
+        jetStreamAndStorage:
+          "per TestServer.startWith: default -js with per-scope OS-temp storage; Core fixtures may opt out",
+        clientRuntime: `Node ${process.version} on ${process.platform}/${process.arch}`,
+        clientTransport: "@nats-io/transport-node 3.4.0",
+        isolation:
+          "per-scope free port and OS-temp effect-nats-js-* store, removed by the owning Scope"
+      })
+    })
+  })
+
+export const probeNatsServer = (
+  binary = "nats-server"
+): Effect.Effect<IntegrationReceipt, TestServerError> =>
+  Effect.tryPromise({
+    try: () => runVersionProbe(binary),
+    catch: (cause) =>
+      cause instanceof TestServerError
+        ? cause
+        : new TestServerError({ reason: `nats-server preflight failed: ${String(cause)}` })
+  })
+
+let sharedPreflight: Promise<IntegrationReceipt> | undefined
+let receiptPrinted = false
+
+const claimRunReceipt = (): boolean => {
+  const marker = join(tmpdir(), `effect-nats-integration-receipt-${process.ppid}.marker`)
+  try {
+    closeSync(openSync(marker, "wx"))
+    return true
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "EEXIST") return false
+    return true
+  }
+}
+
+const preflightOnce = Effect.tryPromise({
+  try: () => sharedPreflight ??= runVersionProbe("nats-server"),
+  catch: (cause) =>
+    cause instanceof TestServerError
+      ? cause
+      : new TestServerError({ reason: `nats-server preflight failed: ${String(cause)}` })
+}).pipe(
+  Effect.tap((receipt) =>
+    Effect.sync(() => {
+      if (receiptPrinted || !claimRunReceipt()) return
+      receiptPrinted = true
+      process.stdout.write(
+        `[effect-nats live integration] server=${receipt.serverVersion}; JetStream/storage=${receipt.jetStreamAndStorage}; runtime=${receipt.clientRuntime}; transport=${receipt.clientTransport}; isolation=${receipt.isolation}\n`
+      )
+    })
+  )
+)
 
 const freePort = Effect.callback<number>((resume) => {
   const probe = createServer()
@@ -79,7 +171,8 @@ const stopChild = (child: ChildProcess): Effect.Effect<void> =>
 export const startWith = (
   options: TestServerOptions = {}
 ): Effect.Effect<TestServer, TestServerError, Scope.Scope> =>
-  freePort.pipe(
+  preflightOnce.pipe(
+    Effect.andThen(freePort),
     Effect.flatMap((port) =>
       Effect.acquireRelease(
         Effect.gen(function*() {
