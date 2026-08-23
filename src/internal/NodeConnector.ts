@@ -33,7 +33,13 @@ const tlsMessagePattern = /certificate|self.signed|tls|ssl/i
 
 // Server URLs may carry userinfo (nats://user:pass@host); never let it into
 // error detail, logs, or schemas.
-const redact = (text: string): string => text.replace(/\/\/[^@/\s]+@/g, "//<redacted>@")
+const redact = (text: string): string =>
+  text
+    .replace(/\/\/[^@/\s]+@/g, "//<redacted>@")
+    .replace(
+      /(\b(?:auth_token|token|password|pass)\b["']?\s*[:=]\s*["']?)([^"',;&}\s]+)/gi,
+      "$1<redacted>"
+    )
 
 const messageOf = (cause: unknown): string | undefined =>
   typeof cause === "object" && cause !== null && "message" in cause

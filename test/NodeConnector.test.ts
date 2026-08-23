@@ -111,3 +111,12 @@ it("redacts server userinfo out of error detail", () => {
   const issue = classifyConnectCause(new Error("dial nats://admin:hunter2@10.0.0.5:4222 failed"))
   expect(issue.detail).toBe("dial nats://<redacted>@10.0.0.5:4222 failed")
 })
+
+it("redacts token and password assignments out of error detail", () => {
+  const issue = classifyConnectCause(
+    new Error("dial failed token=hunter2 password=\"swordfish\" auth_token: abc123")
+  )
+  expect(issue.detail).toBe(
+    "dial failed token=<redacted> password=\"<redacted>\" auth_token: <redacted>"
+  )
+})

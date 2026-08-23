@@ -1,18 +1,14 @@
 # To fix
 
-Reviewed baseline: `origin/main` at `262b77a` plus the working-tree basis recorded by the prior heartbeat
-Reviewed HEAD: local `f506b48`; `origin/main` remains three commits ahead at `262b77a`, and the local
-working tree additionally changes `docs/architecture/README.md` and adds
-`docs/architecture/adr-0001-reconnect-limits.md`, `docs/architecture/adr-0002-wrap-official-client.md`,
-`docs/architecture/adr-0003-kv-naming-strictness.md`,
-`docs/architecture/adr-0004-revision-representation.md`, `docs/architecture/kv-slice-scoping.md`,
-`docs/research/jetstream-kv-bucket-naming.md`, `src/internal/kv/naming.ts`, and
-`test/kv-naming.test.ts`.
-`TO_FIX.md` itself was excluded from the reviewed diff.
+Re-triaged baseline: `bec02ac` (2026-08-23), from hardening-lane start `602aac5`. The
+original review baseline was `origin/main` at `262b77a` plus local `f506b48` and the
+working-tree basis recorded by the prior heartbeat. Every finding below was re-opened at its
+current path, checked against the intervening history, and exercised by the verification gates
+recorded at the end of this file.
 
 ## P0 — correctness, wire incompatibility, or data-loss blockers
 
-- [ ] `origin/main:src/internal/NatsTransport.ts:43` and
+- [x] `origin/main:src/internal/NatsTransport.ts:43` and
       `origin/main:test/internal/natsTransport.test.ts:4,10,20,31,49` — the pushed transport slice
       does not pass its repository gates: production exports `layerTransport`, while every transport
       test imports the nonexistent `layerFromOfficial`.
@@ -30,8 +26,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: on the exact merged tree run `bun run format:check`, `bun run lint`,
     `bun run check`, and `bun run test`; all must pass in CI. Add a compile-time import test if the constructor remains a
     named internal seam.
+  - Status (2026-08-23, bec02ac): fixed in `74dd96a`; the canonical seam is now
+    `src/internal/NatsTransport.ts:44` `layerTransport`, imported by
+    `test/NatsTransport.test.ts:4`, and the full gate is green.
 
-- [ ] `docs/architecture/adr-0004-revision-representation.md:8-14,18-20` — converting the official
+- [x] `docs/architecture/adr-0004-revision-representation.md:8-14,18-20` — converting the official
       client's `number` sequences with `BigInt(n)` is claimed to be lossless, but precision has
       already been irreversibly lost above `Number.MAX_SAFE_INTEGER`.
   - Official behavior and source: pinned NATS.js types KV revisions and CAS versions as `number`
@@ -53,8 +52,12 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: exercise 2^53−1, 2^53, 2^53+1, and 2^64−1 through raw PubAck/API JSON, watch
     metadata, direct get, returned revisions, and expected-revision headers. Every value must either
     round-trip exactly or fail typed before it can drive a read or mutation.
+  - Status (2026-08-23, bec02ac): fixed in `9841867`; amended
+    `docs/architecture/adr-0004-revision-representation.md:8-30` requires lossless string parsing
+    and typed failure for unsafe JSON numbers, with the live adapter implementation following in
+    `0608fb3`.
 
-- [ ] `origin/main:src/internal/NodeOfficialConnect.ts:65-70` and
+- [x] `origin/main:src/internal/NodeOfficialConnect.ts:65-70` and
       `origin/main:src/internal/NatsTransport.ts:120-147` — interruption can leak a connection that
       completes after the Effect consumer stops.
   - Official behavior and source: pinned Effect `tryPromise` aborts its signal on interruption, but
@@ -78,8 +81,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
     resolve it successfully and assert exactly one close, no exposed service, and no live fiber or
     socket. Repeat against the real Node adapter with bounded wall-clock guarding and an exact leak
     counter.
+  - Status (2026-08-23, bec02ac): fixed in `bf081fa`; the moved seam at
+    `src/internal/NodeConnector.ts:86-117` closes a late successful dial after interruption, and
+    `test/NodeConnector.test.ts:72-103` pins exactly one close.
 
-- [ ] `origin/main:src/internal/NatsTransport.ts:38-73,94-102,147` — the production finalizer is
+- [x] `origin/main:src/internal/NatsTransport.ts:38-73,94-102,147` — the production finalizer is
       neither bounded nor observable despite claiming a bounded drain followed by forced close.
   - Official behavior and source: official `drain()` waits for all subscriptions, flushes, and then
     closes (`nats.js@95e76e7:core/src/protocol.ts:1126-1140`); it can therefore remain pending while
@@ -96,8 +102,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: deterministically cover drain success/failure/hang, close success/failure/hang,
     parent interruption, concurrent explicit close and scope close, and exactly-once release. Assert
     terminal observations and zero live resources after every branch.
+  - Status (2026-08-23, bec02ac): fixed in `bf081fa`; accepted ADR-0007 deliberately keeps an
+    unbounded drain only when no timeout is requested, while
+    `src/internal/NatsTransport.ts:56-94` observes drain/close failure and bounds forced close.
 
-- [ ] `origin/main:src/internal/SubscriptionBridge.ts:4-17,27-70` and
+- [x] `origin/main:src/internal/SubscriptionBridge.ts:4-17,27-70` and
       `origin/main:src/internal/Errors.ts:3-18` — overflow terminal ordering contradicts its own
       contract and hard-codes an unaccepted data-disposition policy.
   - Official behavior and source: pinned Effect `Queue.failCauseUnsafe` enters `Closing` while
@@ -117,10 +126,16 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: record side effects with `Stream.tap` and prove the exact sequence of admitted
     values and terminal error at capacity, capacity + 1, concurrent end/overflow, repeated offer,
     interruption, and release. Include zero, negative, fractional, `NaN`, and infinite capacities.
+  - Status (2026-08-23, bec02ac): still open —
+    `docs/architecture/adr-0007-connection-lifecycle-policy.md:10-13` explicitly leaves Core
+    subscription capacity and terminal ordering undecided, while
+    `src/internal/SubscriptionBridge.ts:7-20` and `src/internal/CoreSubscription.ts:27-37`
+    currently encode drain-first ordering. This requires an accepted subscription decision before
+    the implementation can be ratified or changed.
 
 ## P1 — missing outcome or Effect/stream contract violations
 
-- [ ] `docs/architecture/adr-0001-reconnect-limits.md:20-40,65-87`,
+- [x] `docs/architecture/adr-0001-reconnect-limits.md:20-40,65-87`,
       `docs/architecture/adr-0002-wrap-official-client.md:7-25`, and
       `origin/main:src/internal/NatsTransport.ts:94-131` — reconnect ownership and policy are
       contradictory across the accepted ADRs and the pushed implementation.
@@ -146,8 +161,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
     additive jitter bounds, first-connect policy, consecutive auth behavior, terminal status,
     subscription restoration, in-flight request failure, Core message-loss exposure, interruption,
     and absence of a second retry loop.
+  - Status (2026-08-23, bec02ac): fixed in `bf081fa`; ADR-0007 now scopes the Effect schedule to
+    initial connect only, ADR-0002 assigns established reconnect to the official client, and the
+    live two-server/TLS conformance evidence landed in `5a1aca6`.
 
-- [ ] `origin/main:src/internal/NodeOfficialConnect.ts:13-57` — the connect outcome ledger defaults
+- [x] `origin/main:src/internal/NodeOfficialConnect.ts:13-57` — the connect outcome ledger defaults
       every unknown/TLS failure to transient and copies raw error messages into public-shaped error
       detail without redaction.
   - Official behavior and source: Node transport wraps only `ECONNREFUSED`; all other dial, DNS,
@@ -169,8 +187,13 @@ working tree additionally changes `docs/architecture/README.md` and adds
     TLS certificate failures, DNS temporary/permanent outcomes, non-Error rejection, thrown mapper,
     and messages containing tokens/userinfo. Fatal and unclassified branches must make one attempt;
     logs and schemas must contain no secret.
+  - Status (2026-08-23, bec02ac): still open — TLS classification and userinfo redaction were
+    fixed in `bf081fa`, but `src/internal/NodeConnector.ts:44-53,82-83` still defaults unknown
+    shapes to transient `unavailable`, as accepted by
+    `docs/architecture/adr-0007-connection-lifecycle-policy.md:55-59`. Reversing that policy
+    requires owner adjudication of the accepted declaration.
 
-- [ ] `origin/main:test/internal/kit.ts:60-102` — the fake connection does not model official close
+- [x] `origin/main:test/internal/kit.ts:60-102` — the fake connection does not model official close
       or status termination, so future lifecycle/status tests can pass against impossible behavior
       or hang.
   - Official behavior and source: official `closed()` resolves only when close completes
@@ -186,8 +209,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: run the same lifecycle contract against fake and official adapter: open
     `closed()` remains pending, close resolves it once, status emits admitted items then terminates,
     blocked pulls wake, overflow is observable, and all waiter/queue counts return to baseline.
+  - Status (2026-08-23, bec02ac): fixed in `5a1aca6`; `test/Kit.ts` now shares close/status
+    termination state and `test/Kit.test.ts:5-77` pins pending close, waiter wake-up, overflow, and
+    terminal cleanup.
 
-- [ ] `.agents/skills/effect4-stream-discipline/references/effect4-api-notes.md:107,114-117`, its
+- [x] `.agents/skills/effect4-stream-discipline/references/effect4-api-notes.md:107,114-117`, its
       Claude mirror, and `origin/main:src/internal/NatsTransport.ts:94-102` — `Schedule.upTo` is still
       called a hard total-duration bound and the sanctioned skill example still swallows exhaustion.
   - Official behavior and source: `Schedule.upTo` filters on schedule-step elapsed metadata
@@ -206,8 +232,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: after the build is green, prove transient timing, fatal non-retry, exact
     exhaustion, reset after success, blocked-attempt behavior, interruption, and finalization under
     `TestClock`/`Deferred`.
+  - Status (2026-08-23, bec02ac): fixed in `3571182` and reconciled in `bf081fa`; the skill notes
+    and `src/internal/NatsTransport.ts:115-125` now call `upTo` a retry-window bound and preserve
+    observable exhaustion.
 
-- [ ] `.agents/skills/effect4-stream-discipline/SKILL.md:217-228`, its Claude mirror, and
+- [x] `.agents/skills/effect4-stream-discipline/SKILL.md:217-228`, its Claude mirror, and
       `origin/main:test/internal/iteratorBridgeEvidence.test.ts:14-103` — official iterator evidence
       is improved but the real-subscription release proof remains incomplete.
   - Official behavior and source: official `QueuedIteratorImpl` buffers in a growable array, awaits
@@ -223,8 +252,12 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: against official 3.4.0 and the native NATS server, interrupt an idle pending
     subscription pull and prove bounded completion, exactly one unsubscribe/return, no post-release
     callback or delivery, and no hidden growable upstream buffer.
+  - Status (2026-08-23, bec02ac): fixed in `5a1aca6`; `src/internal/CoreSubscription.ts:27-78`
+    uses callback-to-bounded-Queue without constructing the iterator,
+    `test/CoreSubscription.test.ts:40-83` pins idle release, and
+    `test/CoreSubscriptionLive.test.ts:8-58` exercises the real client/server adapter.
 
-- [ ] `.agents/skills/effect4-stream-discipline/SKILL.md:89-92` and
+- [x] `.agents/skills/effect4-stream-discipline/SKILL.md:89-92` and
       `.agents/skills/tdd/SKILL.md:20-24` — applicable skills still disagree on approved internal
       seams even though the pushed slice now relies on them.
   - Official behavior and source: the NATS parser is internal
@@ -238,8 +271,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
     ADR approval as confirmation; ask only when the governing decision is absent.
   - Proof/test gate: preserve a red/green receipt for an internal split-frame or transport defect
     while `src/index.ts` stays empty and no private-function assertion is introduced.
+  - Status (2026-08-23, bec02ac): fixed in `3571182` and reconciled in `bf081fa`; both active
+    skills now define task- or ADR-approved internal capability boundaries as agreed observable
+    seams.
 
-- [ ] `docs/architecture/kv-slice-scoping.md:75-93` — the proposed watch contract invents a distinct
+- [x] `docs/architecture/kv-slice-scoping.md:75-93` — the proposed watch contract invents a distinct
       “initial values done” event and presents it as a pinned official fact.
   - Official behavior and source: official watch selects LastPerSubject, All, or New delivery
     (`nats.js@3a7b736:kv/src/kv.ts:789-822`), computes `isUpdate` from `num_pending`, and emits only
@@ -255,8 +291,12 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: against JetStream-enabled NATS 2.14.5, cover empty, one-key, multi-key,
     all-history, updates-only and resume watches; record the exact entries/phase flags and prove no
     synthetic event unless an accepted ADR deliberately adds one.
+  - Status (2026-08-23, bec02ac): still open —
+    `docs/architecture/kv-slice-scoping.md:83-90` now cites ADR-8 for an immediate synthetic
+    signal, but the pinned nats.js observation cited above still emits entries only. The draft
+    architecture wording and live empty-bucket claim require owner correction and fresh evidence.
 
-- [ ] `docs/architecture/adr-0002-wrap-official-client.md:7-9,33-36` — the accepted wrapper decision
+- [x] `docs/architecture/adr-0002-wrap-official-client.md:7-9,33-36` — the accepted wrapper decision
       names Core, JetStream, and KV but omits Object Store from both its binding scope and claimed
       discharged workbench decisions.
   - Official behavior and source: Object Store is a separate official public package,
@@ -272,8 +312,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: before any Object Store implementation, trace every public operation to the
     selected official package/substrate and approve the chunk, metadata-commit, cleanup,
     interruption, digest, and replacement semantics in an Object Store ADR.
+  - Status (2026-08-23, bec02ac): fixed in `bf081fa`;
+    `docs/architecture/adr-0002-wrap-official-client.md:41-44` explicitly defers the Object Store
+    adapter decision to proposed ADR-0006 and blocks implementation until acceptance.
 
-- [ ] `test/kv-naming.test.ts:24-160` and `src/internal/kv/naming.ts:14-106` — the approved internal
+- [x] `test/kv-naming.test.ts:24-160` and `src/internal/kv/naming.ts:14-106` — the approved internal
       seam has a broad green test batch but no preserved one-test-red/minimal-green TDD receipt.
   - Official behavior and source: the narrow seam is authorized by ADR-0003 lines 34-38; its
     expected behavior maps to pinned JS validators (`nats.js@3a7b736:kv/src/kv.ts:156-174`) and
@@ -288,10 +331,14 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: show a witnessed red for one grammar or mapping behavior against the pre-fix
     seam, the minimal green change, then mutation-check `..`, `KV_`, glued wildcard, prefix mismatch,
     and invalid wire-key branches without expanding the package-public surface.
+  - Status (2026-08-23, bec02ac): obsolete — the missing historical red output for `ddbc138`
+    cannot be recreated without fabricating evidence or rewriting history. The current seams moved
+    to `src/internal/KvNaming.ts` and `test/KvNaming.test.ts`; both are green, and all future changes
+    are governed by the repository's red-first workflow.
 
 ## P2 — maintainability or fidelity gaps
 
-- [ ] `docs/research/jetstream-kv-bucket-naming.md:5-11,45-57,64-82,127-139,191-203` — the new
+- [x] `docs/research/jetstream-kv-bucket-naming.md:5-11,45-57,64-82,127-139,191-203` — the new
       cross-client rulings are not reproducible because two claimed reference implementations are
       neither pinned nor cited to exact source.
   - Official behavior and source: the pinned JS validators accept `a..b` for stored keys but reject
@@ -310,8 +357,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: re-open each pinned validator/mapping implementation, record its exact accepted
     and rejected corpus, and run one shared adversarial table against every implementation before a
     naming ADR consumes the synthesized grammar.
+  - Status (2026-08-23, bec02ac): still open —
+    `docs/research/jetstream-kv-bucket-naming.md:13-20,45-57,127-131` still omits Python/Rust pins
+    and exact source citations while making four-client claims.
 
-- [ ] `docs/research/jetstream-kv-bucket-naming.md:136-139` — Object Store names are described as
+- [x] `docs/research/jetstream-kv-bucket-naming.md:136-139` — Object Store names are described as
       arbitrary bytes, which is not the pinned official client's API or metadata contract.
   - Official behavior and source: pinned NATS.js defines `ObjectStoreMeta.name` and link names as
     `string` (`nats.js@3a7b736:obj/src/types.ts:35-57`), and `_metaSubject` base64url-encodes that
@@ -327,8 +377,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: compare pinned JS, Go, Python, and Rust metadata subjects and round trips for
     ASCII, Latin-1, non-Latin Unicode, combining characters, lone surrogates, and empty names; any
     divergence remains an ADR decision rather than a canonical fact.
+  - Status (2026-08-23, bec02ac): still open —
+    `docs/research/jetstream-kv-bucket-naming.md:136-139` still says arbitrary bytes despite the
+    pinned official string API and metadata contract.
 
-- [ ] `docs/research/jetstream-kv-bucket-naming.md:73-77,195-203`,
+- [x] `docs/research/jetstream-kv-bucket-naming.md:73-77,195-203`,
       `src/internal/kv/naming.ts:47-52`, and `test/kv-naming.test.ts:71,90-96` — glued wildcard tokens
       are repeatedly said to “match nothing”, but the server treats them as literal tokens that can
       match reachable non-conformant keys.
@@ -347,8 +400,11 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: on JetStream-enabled NATS 2.14.5, directly publish a literal `foo>` key, prove an
     exact literal subscription can receive it, prove the strict filter rejects it, and prove a broad
     watch terminates with the agreed typed invalid-key outcome.
+  - Status (2026-08-23, bec02ac): still open —
+    `docs/research/jetstream-kv-bucket-naming.md:73-77,195-203` still says glued tokens match
+    nothing rather than distinguishing conformant wildcard intent from reachable literal subjects.
 
-- [ ] `docs/architecture/kv-slice-scoping.md:119-129` and
+- [x] `docs/architecture/kv-slice-scoping.md:119-129` and
       `docs/architecture/adr-0004-revision-representation.md:1-14` — revision representation is
       simultaneously listed as open and accepted/discharged.
   - Official behavior and source: pinned NATS.js exposes KV revision/CAS values as `number`
@@ -363,19 +419,31 @@ working tree additionally changes `docs/architecture/README.md` and adds
   - Proof/test gate: an architecture consistency check must find no accepted ADR still listed as an
     open decision, and the substrate signature snapshot must use the corrected representation at
     every sequence/revision field.
+  - Status (2026-08-23, bec02ac): still open — amended ADR-0004 is accepted, but
+    `docs/architecture/kv-slice-scoping.md:119-129` still lists revision representation as open.
+    The draft architecture ledger is outside this lane's edit boundary.
 
 ## Watch next
 
-- [ ] `origin/main:package.json:14-15` and
+- [x] `origin/main:package.json:14-15` and
       `origin/main:test/internal/iteratorBridgeEvidence.test.ts:10` — runtime dependencies use
       caret ranges while evidence imports unsupported internal NATS APIs. A lock update that resolves
       above 3.4.0 without a new source/behavior receipt promotes this to a reproducibility defect.
-- [ ] `.agents/skills/effect4-stream-discipline/` and `.claude/skills/effect4-stream-discipline/`
+  - Status (2026-08-23, bec02ac): obsolete — the watch condition has not fired:
+    `bun.lock:103-111` still pins all three NATS packages to 3.4.0, so the internal evidence import
+    remains at the reviewed version.
+- [x] `.agents/skills/effect4-stream-discipline/` and `.claude/skills/effect4-stream-discipline/`
       remain manually mirrored; any behavioral difference promotes this to an agent-consistency
       defect.
-- [ ] `docs/architecture/kv-slice-scoping.md:51-73` is only an outcome-family skeleton. Any KV code
+  - Status (2026-08-23, bec02ac): still open — `git diff --no-index` reports behavioral drift
+    across all three mirrored files, including the `.agents` verification findings and runtime-fact
+    sections. Skill files are outside this lane's ownership.
+- [x] `docs/architecture/kv-slice-scoping.md:51-73` is only an outcome-family skeleton. Any KV code
       added before every official status/API/transport/timeout-after-possible-commit/tombstone branch
       is filled in and accepted promotes the missing branch to a confirmed finding.
+  - Status (2026-08-23, bec02ac): still open — `src/internal/Kv.ts:136-179` now exposes KV
+    operations while the cited outcome-family ledger remains incomplete. `Kv.ts` and the governing
+    architecture document are both outside this lane's ownership.
 
 ## Outcome coverage
 
@@ -413,7 +481,29 @@ working tree additionally changes `docs/architecture/README.md` and adds
   Store operations beyond name representation, TLS server integration, cluster/fault topology, and
   any public API; this slice adds none of those implementations.
 
-## Verification
+## Verification — 2026-08-23 re-triage at `bec02ac`
+
+- `git status --short --branch` before the first edit — clean `hardening` worktree at `602aac5`;
+  the only intervening changes after `bec02ac` are dispatched replay/instruction work and the lane
+  formatter exclusion, none of which changes the triaged production seams.
+- `bun install --frozen-lockfile` with Bun 1.3.14 — passed, 73 installs checked, no changes.
+- `nats-server --version` — `v2.14.5`.
+- `bun run format:check`, `bun run lint`, and `bun run check` — passed at the re-triage baseline.
+- `bun run test` — passed: principal client 20 files / 186 tests and Agent Protocol adapter 11
+  files / 148 tests. The principal suite started scoped live servers with JetStream where declared;
+  it did not run TLS/auth, clustering, constrained-resource, or minimum-version matrices beyond
+  the repository's current fixtures.
+- Target evidence re-opened: every current path named in the 21 statuses, each path's intervening
+  `git log --follow`, accepted ADRs 0001/0002/0004/0005/0007, the active repository skills and
+  testing gates, the locked NATS package versions, and the `.agents`/`.claude` mirror diff.
+- Still open and requiring owner/decision work: Core overflow disposition; unknown-connect
+  classification; the KV synthetic CaughtUp claim; Python/Rust naming pins; Object Store name
+  representation; glued-wildcard wording/live evidence; KV revision-ledger consistency; skill
+  mirror drift; and the incomplete KV outcome ledger. The three naming-research corrections are
+  in this lane's file ownership but require a separate evidence-bearing correction, not a triage
+  checkbox edit.
+
+## Verification — historical review before 2026-08-23 triage
 
 - No new commit appeared: local HEAD remains `f506b48` and `origin/main` remains `262b77a`. New
   non-`TO_FIX.md` changes are accepted ADR-0002/0003, `src/internal/kv/naming.ts`,
