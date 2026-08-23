@@ -1,9 +1,9 @@
 # Brief: test hardening of the principal client — a lane that runs beside feature slices
 
-Status: brief, 2026-08-23 — draft workbench material, dispatchable once the owner's pending
-instruction-file commit (`AGENTS.md`, `docs/AGENTS.md`, `test/AGENTS.md`, `src/internal/AGENTS.md`,
-the `.agents/skills/*` edits, `docs/architecture/README.md`, `dprint.json`, `package.json`) has
-landed, so that this lane never edits an uncommitted file. Not a slice of the Foldable plan; it is
+Status: brief, 2026-08-23 — draft workbench material, **dispatched 2026-08-23 at `39e4773`;
+immutable**. Its precondition — the owner's instruction-file commit (`0e11aa2`, `39e4773`: the
+`AGENTS.md` rewrite, the nested `AGENTS.md` files, `dprint.json`, `package.json`, `bun.lock`) — has
+landed, so the lane never edits an uncommitted file. Not a slice of the Foldable plan; it is
 lane L2 of `../../../Foldable/research/2026-08-23-effect-nats-lanes-plan.md`, designed to run in
 parallel with the subscriber-replay lane (`lean-subscriber-trace-replay-brief.md`) and every later
 feature slice. Tests, CI, scripts, evidence documents, and fixes of confirmed defects in modules
