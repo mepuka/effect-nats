@@ -41,7 +41,7 @@ Draft workbench material (not decisions):
 - [Live-adapter observation fidelity brief](live-adapter-observation-fidelity-brief.md)
 - [Lean subscriber-trace replay brief](lean-subscriber-trace-replay-brief.md) — dispatched 2026-08-23, immutable
 - [Lean subscriber-trace replay follow-up brief](lean-subscriber-trace-replay-followup-brief.md) — dispatched 2026-08-23, immutable
-- [Test hardening brief](test-hardening-brief.md) — draft, not dispatched
+- [Test hardening brief](test-hardening-brief.md) — dispatched 2026-08-23, immutable
 
 Research evidence (not decisions):
 
