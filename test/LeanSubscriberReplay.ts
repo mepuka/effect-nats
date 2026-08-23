@@ -84,14 +84,15 @@ export const SubscriberHistory = Schema.Array(Schema.Array(SummaryEvent))
 const FreeRunning = Schema.Struct({
   outcomes: Schema.Record(Schema.String, Schema.Array(SubscriberHistory))
 })
+const SubscriberObserved = Schema.Array(Schema.Struct({
+  id: Schema.Number,
+  events: Schema.Array(SubscriberEvent)
+}))
 export const SubscriberTrace = Schema.Struct({
   name: Schema.String,
   mirrors: Schema.Array(Schema.String),
   steps: Schema.Array(SubscriberStep),
-  finalObserved: Schema.Array(Schema.Struct({
-    id: Schema.Number,
-    events: Schema.Array(SubscriberEvent)
-  })),
+  finalObserved: SubscriberObserved,
   freeRunning: FreeRunning
 })
 export const SubscriberTraceFixture = Schema.Struct({
@@ -110,7 +111,11 @@ const SubscriberStepOverride = Schema.Struct({
   counts: Schema.optional(Schema.Literal("unobservable"))
 })
 const SubscriberTraceOverrides = Schema.Struct({
-  steps: Schema.Record(Schema.String, SubscriberStepOverride)
+  steps: Schema.Record(Schema.String, SubscriberStepOverride),
+  finalObserved: Schema.optional(Schema.Struct({
+    finding: Schema.String,
+    events: SubscriberObserved
+  }))
 })
 const SubscriberLiveOverrides = Schema.Struct({
   schema: Schema.Literal(2),
@@ -427,7 +432,12 @@ const replayTrace = (
               ignored,
               context
             )
-            yield* armGate(state, context)
+            if (expectedEvents.some((event) => event._tag === "Failed")) {
+              yield* Fiber.await(state.fiber)
+              expect(state.fiber.pollUnsafe(), `${context}: terminal fiber exit`).toBeDefined()
+            } else {
+              yield* armGate(state, context)
+            }
           }
           yield* checkCounts(target, step.counts, context, override)
           break
@@ -436,13 +446,16 @@ const replayTrace = (
           const state = states.get(step.id)
           expect(state, `${context}: registered subscriber ${step.id}`).toBeDefined()
           if (state === undefined) break
+          const expectedEvents = override?.events ?? step.events
           const gate = state.gate
-          expect(gate, `${context}: pull has one armed gate`).toBeDefined()
-          if (gate === undefined) break
+          if (gate === undefined) {
+            assertExpected([], expectedEvents, ignored, `${context}: no live pull available`)
+            yield* checkCounts(target, step.counts, context, override)
+            break
+          }
           if (target.settleBeforePull !== undefined) yield* target.settleBeforePull
           state.gate = undefined
           const before = state.observed.length
-          const expectedEvents = override?.events ?? step.events
           const targetLength = before + expectedEvents.length
           expect(yield* Deferred.succeed(gate.release, void 0), `${context}: release once`).toBe(
             true
@@ -481,11 +494,18 @@ const replayTrace = (
 
     // SubTraces.checkFinal is a selective assertion list: compare every id the
     // fixture names, without inventing assertions for registered ids it omits.
-    const actualFinal = trace.finalObserved.map(({ id }) => ({
+    const finalOverride = overrides?.finalObserved
+    if (finalOverride !== undefined) {
+      expect(finalOverride.finding, `${trace.name} finalObserved: finding link`).toBe(
+        findingsDocument
+      )
+    }
+    const expectedFinal = finalOverride?.events ?? trace.finalObserved
+    const actualFinal = expectedFinal.map(({ id }) => ({
       id,
       events: states.get(id)?.observed ?? []
     }))
-    assertExpected(actualFinal, trace.finalObserved, ignored, `${trace.name}: finalObserved`)
+    assertExpected(actualFinal, expectedFinal, ignored, `${trace.name}: finalObserved`)
   })
   return program.pipe(Effect.ensuring(Effect.suspend(() => cleanup(states.values()))))
 }
