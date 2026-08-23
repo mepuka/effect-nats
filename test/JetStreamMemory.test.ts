@@ -3,6 +3,7 @@ import { Deferred, Effect, Exit, Fiber, Queue, Result, Stream } from "effect"
 import type { ConsumeEvent } from "../src/internal/JetStream.ts"
 import * as Memory from "../src/internal/JetStreamMemory.ts"
 import { conformance } from "./JetStreamConformance.ts"
+import { leanSubscriberFreeRun } from "./LeanSubscriberFreeRun.ts"
 import { leanSubscriberGateSelfCheck, leanSubscriberReplay } from "./LeanSubscriberReplay.ts"
 import { leanTraceReplay } from "./LeanTraceReplay.ts"
 
@@ -20,6 +21,7 @@ conformance("memory", (f) => Effect.flatMap(Memory.make, (memory) => f(memory.se
 leanTraceReplay("memory", (f) => Effect.flatMap(Memory.make, (memory) => f(memory.service)))
 leanSubscriberReplay("memory", (f) => Effect.flatMap(Memory.make, f))
 leanSubscriberGateSelfCheck((f) => Effect.flatMap(Memory.make, f))
+leanSubscriberFreeRun("memory", (f) => Effect.flatMap(Memory.make, f))
 
 // Memory-only observations below: the diagnostic subscriber counter and the
 // publisher-suspension face of PullWindow — on this interpreter the publisher

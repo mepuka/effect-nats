@@ -127,3 +127,30 @@ Skipped-count totals per trace are therefore: `sa-replay` 1, `sa-starts` 2, `sa-
 The generated `finalObserved` field is a selective assertion list, matching
 `SubTraces.lean.checkFinal`: the harness compares every subscriber ID named by the fixture and does
 not invent assertions for IDs that the generated trace omits.
+
+### Free-running schedules
+
+Both interpreters ran 25 fresh executions per trace. Each execution used `FastCheck.sample` with
+the recorded seed to draw one `Effect.yieldNow` count in `0..3` between every pair of fixture
+labels; `pull` labels performed no consumer action. The seed ranges below are inclusive and contain
+every integer in the range, so they record all 25 seeds per trace and are identical across the two
+interpreters.
+
+Distinct results are shown as `observed / acceptance-set size` per subscriber ID.
+
+| Trace           | Seeds         | Memory                         | Live                           |
+| --------------- | ------------- | ------------------------------ | ------------------------------ |
+| `sa-replay`     | 731000–731024 | id 0: 1 / 2                    | id 0: 1 / 2                    |
+| `sa-starts`     | 731100–731124 | ids 0–2: 1 / 2; ids 3–6: 1 / 1 | ids 0–2: 1 / 2; ids 3–6: 1 / 1 |
+| `sa-filters`    | 731200–731224 | id 0: 1 / 2                    | id 0: 1 / 2                    |
+| `sa-delete`     | 731300–731324 | id 0: 1 / 2; id 1: 1 / 1       | id 0: 1 / 2; id 1: 1 / 1       |
+| `sa-lag`        | 731400–731424 | id 0: 4 / 8                    | id 0: 4 / 8                    |
+| `sa-resume`     | 731500–731524 | id 0: 4 / 8; id 1: 1 / 1       | id 0: 4 / 8; id 1: 1 / 1       |
+| `sa-accounting` | 731600–731624 | ids 0–1: 1 / 1                 | ids 0–1: 1 / 1                 |
+| `sa-drain`      | 731700–731724 | id 0: 4 / 14                   | id 0: 2 / 14                   |
+
+No observed history fell outside its generated acceptance set, so this pass records no class-A4
+finding and no adjudication row. The sampled yields exposed multiple accepted lag/resume histories
+and more memory than live chunk placements for `sa-drain`; they did not diversify the other
+recorded histories. This mode does not exhaust scheduler placements or the interleavings inside
+fan-out.

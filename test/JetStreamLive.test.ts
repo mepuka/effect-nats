@@ -6,6 +6,7 @@ import { Deferred, Effect, Fiber, Queue, Stream } from "effect"
 import type { JetStream } from "../src/internal/JetStream.ts"
 import * as JetStreamLive from "../src/internal/JetStreamLive.ts"
 import { conformance } from "./JetStreamConformance.ts"
+import { leanSubscriberFreeRun } from "./LeanSubscriberFreeRun.ts"
 import { leanSubscriberReplay } from "./LeanSubscriberReplay.ts"
 import { leanTraceReplay } from "./LeanTraceReplay.ts"
 import * as TestServer from "./TestServer.ts"
@@ -38,6 +39,12 @@ leanSubscriberReplay(
   (f) =>
     withLive((service, nc) => f({ service, settleBeforePull: Effect.promise(() => nc.flush()) })),
   30_000
+)
+leanSubscriberFreeRun(
+  "live",
+  (f) =>
+    withLive((service, nc) => f({ service, settleBeforePull: Effect.promise(() => nc.flush()) })),
+  60_000
 )
 
 const utf8 = new TextEncoder()
