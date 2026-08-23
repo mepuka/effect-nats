@@ -1,69 +1,91 @@
-# effect-nats — monorepo rules
+# effect-nats — workspace contract
 
-This Bun workspace develops the principal Effect v4 NATS client and one subsystem:
+This Bun workspace contains two semantic contexts:
 
-- the root `effect-nats` client for NATS Core and the JetStream primitives required by Key/Value
-  and Object Store; and
-- `packages/agents`, the `effect-nats-agents` subsystem implementing Synadia Agent Protocol v0.3.
+- the principal Effect v4 NATS client at the repository root; and
+- `packages/agent`, an independent adapter for the externally owned Synadia Agent Protocol v0.3.
 
-The client public contract is under design; its root export stays empty until an ADR approves the
-first API surface. Agent-protocol work also reads `packages/agents/AGENTS.md`.
+The client public contract is still under design. `src/index.ts` stays empty until an accepted ADR
+approves a surface. Read `CONTEXT-MAP.md` before changing cross-package terminology or moving a
+capability between the two contexts.
 
-Read `CONTEXT-MAP.md` before changing cross-package terminology or moving a capability between the
-principal NATS client and the Agents subsystem.
+## Scope routing
 
-## Read before changing
+The nearest nested `AGENTS.md` adds rules; it never replaces this file.
 
-- **Client findings:** before client planning, implementation, or review, read `TO_FIX.md`.
-  Confirmed items block overlapping work until corrected and reverified; watch items guide
-  inspection but do not authorize unresolved design choices.
-- **Agent Protocol:** before changing `packages/agents`, read its `AGENTS.md`, vendored protocol,
-  affected requirement-ledger entries, and conformance rules.
-- **Implementation or review:** invoke the repository-local `effect-nats-implementation` skill at
-  `.agents/skills/effect-nats-implementation/SKILL.md` and follow its fidelity receipt.
-- **Feature, fix, stream, lifecycle, or integration-test work:** also invoke the repository-local
-  `tdd` skill at `.agents/skills/tdd/SKILL.md` and work in one-seam red/green vertical slices.
+- **Client internals:** before changing `src/internal/**`, read `src/internal/AGENTS.md`.
+- **Client evidence:** before changing `test/**`, read `test/AGENTS.md`.
+- **Client decisions or research:** before changing `docs/**`, read `docs/AGENTS.md`.
+- **Agent Protocol adapter:** before changing `packages/agent/**`, read
+  `packages/agent/AGENTS.md` and any nearer instructions it names.
+
+## Task routing
+
+- **Client planning, implementation, or review:** read `TO_FIX.md`. Confirmed findings block
+  overlapping work until corrected and reverified; watch items guide inspection but do not settle
+  an open design.
+- **Implementation or review:** invoke `.agents/skills/effect-nats-implementation/SKILL.md` and
+  follow its fidelity receipt.
+- **Feature, fix, stream, lifecycle, or integration-test work:** also invoke
+  `.agents/skills/tdd/SKILL.md` and work in one-seam red/green vertical slices.
 - **Stream, subscription, queue, fiber, readiness, timeout, or concurrency work:** also invoke
-  `.agents/skills/effect4-stream-discipline/SKILL.md` for hardening. Its agent-protocol case studies
-  are methodology, never NATS semantic authority.
-- **Effect code, services, streams, errors, retries, config, or tests:** also read `docs/STYLE.md`.
-- **Protocol, compatibility, Core, KV, or Object Store behavior:** read
-  `docs/research/nats-js-reference.md` and the applicable ADR under `docs/architecture/`.
-- **Third-party precedent:** read `docs/research/ecosystem-survey.md`; treat it as comparison
-  evidence, never protocol authority.
-- **Effect architecture rationale:** read `docs/research/effect-native-client-architecture.md`.
+  `.agents/skills/effect4-stream-discipline/SKILL.md`. Its case studies are methodology, never NATS
+  semantic authority.
+- **Effect code, services, streams, errors, retries, configuration, or tests:** also read
+  `docs/STYLE.md` and verify API shapes in the pinned `effect` package source.
+- **Sequential JetStream semantics or formal claims:** read the sibling Foldable package contract
+  at `../Foldable/formal/effect_nats_substrate/AGENTS.md`,
+  `../Foldable/formal/effect_nats_substrate/docs/signature-snapshot.md`, and
+  `../Foldable/research/2026-08-22-first-slice-jetstream-memory-lean-model.md` before changing the
+  modeled declarations or their evidence boundary.
+- **Lean modeling, proof, or reasoning about the Lean model (including slice documents, briefs,
+  reviews, and refinement claims):** invoke the Lean systems suite — installed at
+  `.agents/skills/lean-*`, catalogued in `skills/CATALOG.md` — in catalogue order:
+  `lean-formalization-strategy` Pass A before any contract or slice document; `lean-model-invariants`
+  and `lean-algebraic-systems` for representation and transition design; Pass B to freeze signatures
+  before proofs; `lean-llm-proof-loop` for proof bodies against frozen statements;
+  `lean-assurance-review` before any claim is called verified. This routing is mandatory, not
+  advisory.
 
-## Laws
+## Workspace laws
 
 1. **Design gate.** A new public export, service method, error variant, encoded type, compatibility
-   promise, or runtime promise requires an accepted ADR. Experiments remain internal.
-2. **Source precedence.** Pinned NATS protocol/server and official client source > conformance and
-   integration observations > official docs > third-party projects. Record disagreements.
-3. **Scope owns lifetime.** Connections, readers, writers, subscriptions, requests, reconnect
-   loops, heartbeats, and drains acquire and finalize within `Scope`. Layers finish acquisition;
-   their long-lived fibers use scoped forks.
-4. **Stream handling is the first implementation gate.** Every producer/consumer boundary names
-   its capacity, unit, overflow and terminal ordering, producer suspension authority, and release
-   behavior. Public subscriptions expose pull-based `Stream`; private callbacks bridge through a
-   bounded `Queue`, `PubSub`, or `SubscriptionRef` chosen for the delivery contract.
-5. **Typed boundaries.** Decode untrusted wire/config/storage values, preserve protocol status and
-   headers, and translate transport defects into operation-labeled typed errors without swallowing
-   interruption.
-6. **Truthful retry.** Use `Schedule` only at the narrowest idempotent boundary. Publish, request,
-   reconnect, KV mutation, and object transfer each document their distinct retry consequences.
-7. **Layered tests.** Pure protocol tests use bytes and deterministic state machines; Effect tests
-   use fakes and test services; server integration tests run separately against declared NATS
-   versions. Time and concurrency tests use `TestClock`, `Deferred`, `Queue`, or `Latch`.
-8. **No accidental endorsement.** The repository may target upstream quality, but documentation
-   states its actual governance and release status until it is accepted by the NATS project.
+   promise, or runtime promise requires an accepted ADR. A proposal, workbench note, test helper,
+   or `AGENTS.md` pointer does not confer acceptance.
+2. **Semantic declarations govern.** Accepted configuration and operation specifications are
+   formal declarations of the model: their carriers, relations, signatures, equations, errors,
+   observations, and laws constrain every interpreter. Source comments explain a declaration; they
+   do not replace or amend it. The covered sequential JetStream slice is mechanized in the sibling
+   Lean package. Change semantics through the governing declaration and reopen its proofs and
+   implementation evidence.
+3. **Source precedence.** Pinned NATS protocol/server and official client source > conformance and
+   integration observations > official documentation > third-party projects. Record
+   disagreements; do not blend the tiers.
+4. **Scope owns lifetime.** Connections, readers, writers, subscriptions, requests, reconnect
+   loops, heartbeats, and drains acquire and finalize within `Scope`. Long-lived fibers are scoped.
+5. **Flow control is explicit.** Every producer/consumer boundary names capacity, unit, overflow
+   and terminal ordering, producer suspension authority, and release behavior.
+6. **Boundaries are typed.** Decode untrusted wire, configuration, and storage values; preserve
+   protocol status and headers; translate transport defects without swallowing interruption.
+7. **Retry is truthful.** Apply `Schedule` only at a named idempotent boundary. Publish, request,
+   reconnect, KV mutation, and object transfer have different retry consequences.
+8. **Claims name their evidence.** Distinguish accepted design, local deterministic tests,
+   in-memory model behavior, live-server observations, interoperability evidence, formal theorems,
+   assumptions, and open obligations. None silently stands in for another.
+9. **No accidental endorsement.** State the repository's actual governance and release status; do
+   not imply NATS-project or Synadia acceptance.
 
-## Change workflow
+## Keeping instructions current
 
-1. State the protocol or API contract and its evidence.
-2. Add a failing unit, type, conformance, or integration test at the narrowest layer.
-3. Implement through internal modules; export only ADR-approved surface.
-4. Run `bun run format:check`, `bun run lint`, `bun run check`, and `bun run test`.
-5. Report which claims are tested locally, tested against a server, assumed, or still undecided.
+When an accepted ADR or workflow specification begins governing a subtree, add one short trigger
+pointer to the nearest applicable `AGENTS.md` in the same change. Keep the evolving rule in its
+canonical document rather than copying it into several instruction files. When a document is
+superseded, update or remove its pointers.
 
-A change is complete when all four checks pass, public-surface changes cite an ADR, lifecycle and
-backpressure behavior are test-covered, and no unrelated working-tree changes are included.
+## Completion
+
+Code changes are complete only after `bun run format:check`, `bun run lint`, `bun run check`, and
+`bun run test` pass, affected public decisions are cited, and lifecycle/backpressure behavior is
+covered. Documentation-only instruction changes require formatting plus a pointer/scope audit.
+Always report which claims were tested locally, tested against a server, proved, assumed, or left
+open, and do not include unrelated working-tree changes.
