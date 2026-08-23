@@ -1,0 +1,85 @@
+{
+  "schema": 2,
+  "traces": {
+    "sa-replay": {
+      "steps": {
+        "3": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-starts": {
+      "steps": {
+        "6": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "12": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-delete": {
+      "steps": {
+        "1": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "2": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "7": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-lag": {
+      "steps": {
+        "5": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-resume": {
+      "steps": {
+        "9": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-accounting": {
+      "steps": {
+        "1": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "3": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "4": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        },
+        "5": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    },
+    "sa-drain": {
+      "steps": {
+        "7": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "counts": "unobservable"
+        }
+      }
+    }
+  }
+}

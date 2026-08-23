@@ -410,5 +410,5 @@
  "schema": 1,
  "producer": "EffectNatsSubstrate",
  "pin": "d06223f",
- "foldableCommit": "8b6cf8acc7fe2735184e30dac51bbd60b979b80f",
+ "foldableCommit": "0c118600cf7edd670311d5d5b998e348be74eb7c",
  "compare": {"ignore": ["timestampMillis"]}}
