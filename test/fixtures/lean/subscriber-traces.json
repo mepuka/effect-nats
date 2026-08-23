@@ -84,7 +84,13 @@
    "mirrors": ["C7"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"0":
+     [[[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "3", "_tag": "Entry"}]]]},
+    "outcomes":
     {"0":
      [[[{"sequence": "1", "_tag": "Entry"},
         {"sequence": "2", "_tag": "Entry"},
@@ -368,7 +374,36 @@
    "mirrors": ["C8", "C15"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"6":
+     [[[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}]]],
+     "5":
+     [[[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}]]],
+     "4":
+     [[[{"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}]]],
+     "3": [[[{"_tag": "CaughtUp"}]]],
+     "2": [[[{"_tag": "CaughtUp"}], [{"sequence": "4", "_tag": "Entry"}]]],
+     "1":
+     [[[{"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}]]],
+     "0":
+     [[[{"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}]]]},
+    "outcomes":
     {"6":
      [[[{"sequence": "1", "_tag": "Entry"},
         {"sequence": "2", "_tag": "Entry"},
@@ -522,7 +557,11 @@
    "mirrors": ["C9"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"0":
+     [[[{"sequence": "1", "_tag": "Entry"}, {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}]]]},
+    "outcomes":
     {"0":
      [[[{"sequence": "1", "_tag": "Entry"}, {"_tag": "CaughtUp"}]],
       [[{"sequence": "1", "_tag": "Entry"}, {"_tag": "CaughtUp"}],
@@ -625,7 +664,13 @@
    "mirrors": ["C10"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"1": [[[{"sequence": "1", "_tag": "Entry"}, {"_tag": "CaughtUp"}]]],
+     "0":
+     [[[{"_tag": "CaughtUp"}],
+       [{"error": {"stream": "KV_b", "_tag": "StreamNotFound"},
+         "_tag": "Failed"}]]]},
+    "outcomes":
     {"1": [[[{"sequence": "1", "_tag": "Entry"}, {"_tag": "CaughtUp"}]]],
      "0":
      [[[{"_tag": "CaughtUp"}]],
@@ -739,7 +784,38 @@
    "mirrors": ["C13"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"0":
+     [[[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "1",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "2",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "3",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"sequence": "4", "_tag": "Entry"}]]]},
+    "outcomes":
     {"0":
      [[[{"_tag": "CaughtUp"}]],
       [[{"_tag": "CaughtUp"}], [{"sequence": "1", "_tag": "Entry"}]],
@@ -929,7 +1005,42 @@
    "mirrors": ["C14"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"1":
+     [[[{"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}]]],
+     "0":
+     [[[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "1",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "2",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "3",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"sequence": "4", "_tag": "Entry"}]]]},
+    "outcomes":
     {"1":
      [[[{"sequence": "3", "_tag": "Entry"},
         {"sequence": "4", "_tag": "Entry"},
@@ -1063,7 +1174,9 @@
    "mirrors": ["M1"],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"1": [[[{"_tag": "CaughtUp"}]]], "0": [[[{"_tag": "CaughtUp"}]]]},
+    "outcomes":
     {"1": [[[{"_tag": "CaughtUp"}]]], "0": [[[{"_tag": "CaughtUp"}]]]}},
    "finalObserved":
    [{"id": 0, "events": [{"_tag": "CaughtUp"}]},
@@ -1174,7 +1287,46 @@
    "mirrors": [],
    "kind": "subscriber",
    "freeRunning":
-   {"outcomes":
+   {"terminalOutcomes":
+    {"0":
+     [[[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}, {"sequence": "2", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "2",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}, {"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}, {"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"sequence": "4", "_tag": "Entry"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}, {"sequence": "3", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "3",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}, {"sequence": "3", "_tag": "Entry"}],
+       [{"sequence": "4", "_tag": "Entry"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"},
+        {"sequence": "4", "_tag": "Entry"}]],
+      [[{"_tag": "CaughtUp"}],
+       [{"sequence": "1", "_tag": "Entry"}],
+       [{"sequence": "2", "_tag": "Entry"}],
+       [{"sequence": "3", "_tag": "Entry"}],
+       [{"sequence": "4", "_tag": "Entry"}]]]},
+    "outcomes":
     {"0":
      [[[{"_tag": "CaughtUp"}]],
       [[{"_tag": "CaughtUp"}],
@@ -1263,10 +1415,215 @@
         "sequence": "4",
         "payload": "v4",
         "headers": []},
-       "_tag": "Entry"}]}]}],
+       "_tag": "Entry"}]}]},
+  {"steps":
+   [{"op":
+     {"op": "createStream",
+      "config":
+      {"subjects": ["$KV.b.>"],
+       "name": "KV_b",
+       "maxMessagesPerSubject": 0,
+       "allowRollup": true}},
+     "label": "op",
+     "expect": {"ok": {"_tag": "unit"}},
+     "counts": []},
+    {"op":
+     {"timestampMillis": 1,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v1",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "label": "op",
+     "expect": {"ok": {"sequence": "1", "_tag": "sequence"}},
+     "counts": []},
+    {"op":
+     {"timestampMillis": 2,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v2",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "label": "op",
+     "expect": {"ok": {"sequence": "2", "_tag": "sequence"}},
+     "counts": []},
+    {"op":
+     {"timestampMillis": 3,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v3",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "label": "op",
+     "expect": {"ok": {"sequence": "3", "_tag": "sequence"}},
+     "counts": []},
+    {"stream": "KV_b",
+     "options":
+     {"start": {"_tag": "AllHistory"},
+      "filters": ["$KV.b.>"],
+      "buffer": {"messages": 1, "_tag": "TerminateOnLag"}},
+     "lastEnqueued": "3",
+     "label": "register",
+     "id": 0,
+     "expect": {"ok": {"_tag": "unit"}},
+     "events":
+     [{"message":
+       {"timestampMillis": 1,
+        "subject": "$KV.b.k",
+        "sequence": "1",
+        "payload": "v1",
+        "headers": []},
+       "_tag": "Entry"},
+      {"message":
+       {"timestampMillis": 2,
+        "subject": "$KV.b.k",
+        "sequence": "2",
+        "payload": "v2",
+        "headers": []},
+       "_tag": "Entry"},
+      {"message":
+       {"timestampMillis": 3,
+        "subject": "$KV.b.k",
+        "sequence": "3",
+        "payload": "v3",
+        "headers": []},
+       "_tag": "Entry"},
+      {"_tag": "CaughtUp"}],
+     "counts": [["KV_b", 1]]},
+    {"op":
+     {"timestampMillis": 4,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v4",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "label": "op",
+     "expect": {"ok": {"sequence": "4", "_tag": "sequence"}},
+     "counts": []},
+    {"op":
+     {"timestampMillis": 5,
+      "subject": "$KV.b.k",
+      "stream": "KV_b",
+      "payload": "v5",
+      "op": "publish",
+      "headers": [],
+      "expectedLastSubjectSequence": null},
+     "label": "op",
+     "expect": {"ok": {"sequence": "5", "_tag": "sequence"}},
+     "counts": [["KV_b", 0]]},
+    {"label": "pull",
+     "id": 0,
+     "events":
+     [{"message":
+       {"timestampMillis": 4,
+        "subject": "$KV.b.k",
+        "sequence": "4",
+        "payload": "v4",
+        "headers": []},
+       "_tag": "Entry"}],
+     "counts": []},
+    {"label": "pull",
+     "id": 0,
+     "events":
+     [{"error":
+       {"stream": "KV_b",
+        "lastDeliveredSequence": "4",
+        "_tag": "ConsumerLagged"},
+       "_tag": "Failed"}],
+     "counts": []}],
+   "name": "sa-replay-lag",
+   "mirrors": [],
+   "kind": "subscriber",
+   "freeRunning":
+   {"terminalOutcomes":
+    {"0":
+     [[[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "4",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}],
+       [{"sequence": "5", "_tag": "Entry"}]]]},
+    "outcomes":
+    {"0":
+     [[[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}]],
+      [[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}]],
+      [[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}],
+       [{"error":
+         {"stream": "KV_b",
+          "lastDeliveredSequence": "4",
+          "_tag": "ConsumerLagged"},
+         "_tag": "Failed"}]],
+      [[{"sequence": "1", "_tag": "Entry"},
+        {"sequence": "2", "_tag": "Entry"},
+        {"sequence": "3", "_tag": "Entry"},
+        {"_tag": "CaughtUp"}],
+       [{"sequence": "4", "_tag": "Entry"}],
+       [{"sequence": "5", "_tag": "Entry"}]]]}},
+   "finalObserved":
+   [{"id": 0,
+     "events":
+     [{"message":
+       {"timestampMillis": 1,
+        "subject": "$KV.b.k",
+        "sequence": "1",
+        "payload": "v1",
+        "headers": []},
+       "_tag": "Entry"},
+      {"message":
+       {"timestampMillis": 2,
+        "subject": "$KV.b.k",
+        "sequence": "2",
+        "payload": "v2",
+        "headers": []},
+       "_tag": "Entry"},
+      {"message":
+       {"timestampMillis": 3,
+        "subject": "$KV.b.k",
+        "sequence": "3",
+        "payload": "v3",
+        "headers": []},
+       "_tag": "Entry"},
+      {"_tag": "CaughtUp"},
+      {"message":
+       {"timestampMillis": 4,
+        "subject": "$KV.b.k",
+        "sequence": "4",
+        "payload": "v4",
+        "headers": []},
+       "_tag": "Entry"},
+      {"error":
+       {"stream": "KV_b",
+        "lastDeliveredSequence": "4",
+        "_tag": "ConsumerLagged"},
+       "_tag": "Failed"}]}]}],
  "snapshot": "r3.1",
  "schema": 2,
  "producer": "EffectNatsSubstrate",
  "pin": "872bd7f",
- "foldableCommit": "0c118600cf7edd670311d5d5b998e348be74eb7c",
+ "foldableCommit": "1c8ddc5084d2ddafd8924571df5494e1a593eda5",
  "compare": {"ignore": ["timestampMillis"]}}
