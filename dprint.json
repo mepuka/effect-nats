@@ -6,7 +6,7 @@
     "**/node_modules",
     "**/dist",
     "**/coverage",
-    "packages/agents/**",
+    "packages/agent/**",
     "test/fixtures/lean/sequential-traces.json",
     "test/fixtures/lean/subscriber-traces.json",
     "test/fixtures/lean/live-overrides-subscriber.json"

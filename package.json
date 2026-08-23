@@ -11,7 +11,7 @@
     "test": "bun run test:client && bun run test:agents",
     "test:client": "vitest run",
     "test:agents": "bun run --filter effect-nats-agents test",
-    "lint": "oxlint src test vitest.config.ts packages/agents/src",
+    "lint": "oxlint src test vitest.config.ts packages/agent/src",
     "format": "dprint fmt",
     "format:check": "dprint check",
     "verify": "bun run format:check && bun run lint && bun run check && bun run test",

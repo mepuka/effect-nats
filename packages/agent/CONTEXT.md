@@ -65,3 +65,22 @@ _Avoid_: Protocol kernel, our protocol model
 An opt-in contract owned by this repository, negotiated separately and kept outside the protocol's
 reserved namespace. It is never evidence of Synadia Agent Protocol conformance.
 _Avoid_: Protocol feature, protocol improvement, protocol-compatible mode
+
+**Effect AI model**:
+An implementation of Effect v4's `LanguageModel` capability. It may be local or provider-backed and
+is configured independently from NATS transport and Agent Protocol registration.
+_Avoid_: Agent, agent host
+
+**Effect AI host adapter**:
+The local adapter that serves an Effect AI model through the protocol's agent-host role. It maps
+protocol prompt requests into model input and model output into protocol reply chunks.
+
+**Remote agent model adapter**:
+The local adapter that presents one discovered remote agent as an Effect AI model. It remains a
+protocol caller underneath; it does not turn the remote agent into an in-process model.
+
+**Prompt mapping policy**:
+The explicit rule for translating between Effect AI's structured prompt model and the protocol's
+text-plus-attachments request envelope. A mapping may be strict or intentionally lossy; loss must
+never be implicit.
+_Avoid_: Wire codec, because neither side is the other's encoded representation

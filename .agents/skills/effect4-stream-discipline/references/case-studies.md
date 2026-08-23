@@ -2,9 +2,15 @@
 
 Every case: the symptom, the code that produced it, the test that revealed
 it, the repair, and the transferable principle. Codes: S = streaming,
-C = concurrency, P = performance/memory, E = environment. All code is from a
-NATS agent-protocol runtime (reply streams shaped
+C = concurrency, P = performance/memory, E = environment. S/C/P/E code is from
+a NATS agent-protocol runtime (reply streams shaped
 `ack · chunk* · error? · terminator`), lightly compacted.
+
+V = **verification findings**: not repairs, but what surfaced while building a
+formal reference model of the effect-nats in-memory JetStream interpreter and
+reading the rc.111 runtime it sits on. Shape: evidence → the trace or test that
+exposes it → principle. Paths in group V are effect-nats repository-relative
+paths and `node_modules/effect/src/…`.
 
 ## Contents
 
@@ -25,6 +31,11 @@ NATS agent-protocol runtime (reply streams shaped
 - [E1 — Two copies of effect](#e1)
 - [E2 — CI green-red split: pin what you verified](#e2)
 - [E3 — Effect 3 memory produces Effect 4 crashes](#e3)
+- [V1 — One pull drains the buffer; one-element models over-approximate](#v1)
+- [V2 — `fail` delivers the buffer, so "last delivered" is honest](#v2)
+- [V3 — A permit held across a parked offer stalls everyone](#v3)
+- [V4 — Generous parameters hide interpreter differences](#v4)
+- [V5 — The reference-model oracle: `step`, a projection, and `Except`](#v5)
 
 ---
 
@@ -334,8 +345,12 @@ Effect-native `Queue.take` interrupts cleanly.
 **Repair.** Remove the iterator from the path entirely: callback-mode
 subscription feeding a scoped Effect Queue. No pending pull exists, so
 interruption is just a queue-take interrupt; scope close unsubscribes
-synchronously and shuts the queue down (LIFO: unsubscribe first, then
-shutdown):
+synchronously and shuts the queue down. LIFO here is the scope's own rule, not
+a convention: `acquireRelease` appends to an insertion-ordered finalizer `Map`
+and close walks it backwards, sequentially by default
+(`node_modules/effect/src/internal/effect.ts:3942-3958`, `:3863-3873`,
+`:3802-3823`, `:3886-3891`). Acquire the queue first and subscribe second, and
+release is "unsubscribe, then shutdown" for free:
 
 ```ts
 const queue = yield* Effect.acquireRelease(
@@ -422,7 +437,12 @@ yield * supervised(heartbeatLoop) // starts only after registration
 
 **Principle.** `forkScoped` + return is a _claim_ of readiness with no
 witness. Anything that says "started/registered/subscribed" must await a
-signal produced by the actual success of that operation.
+signal produced by the actual success of that operation. The same hole opens
+without any fork: a stream built by `Stream.unwrap` runs its setup effect at
+the consumer's _first pull_, memoized
+(`node_modules/effect/src/Stream.ts:1633-1635`,
+`node_modules/effect/src/Channel.ts:9039-9052`), so holding the stream value
+witnesses nothing — only a consumer-side signal does (V2, V5).
 
 ---
 
@@ -828,3 +848,198 @@ in [effect4-api-notes.md](effect4-api-notes.md):
 `grep "export declare" node_modules/effect/dist/<Module>.d.ts` before
 using any API you have not used _in this exact version_. Ten seconds of
 grep beats a module-load-time crash in someone else's test run.
+
+---
+
+<a name="v1"></a>
+
+## V1 — One pull drains the buffer; one-element models over-approximate
+
+**Evidence.** A first reference model of the memory JetStream interpreter gave
+its consumer a one-element `pull`: dequeue the head, free one slot. Simple, and
+wrong for every `TerminateOnLag n` with `n ≥ 2`.
+
+**The trace that exposes it.** `Stream.fromQueue` pulls with `Queue.takeAll`,
+which is `takeBetween(1, +∞)`; `takeBetweenUnsafe` takes
+`MutableList.takeN(messages, max)` clamped to the buffer length and then
+releases capacity (`node_modules/effect/src/Stream.ts:1132-1133`,
+`Channel.ts:1229-1231`, `Queue.ts:1297-1298`, `:1426-1433`, `:1977-1998`,
+`MutableList.ts:418-425`). Any history with two publishes between two pulls
+falsifies the one-element model: after a pull the runtime's occupancy is `0`
+and the model's is `1`, so the model reaches overflow states the runtime never
+reaches. The interpreter's overflow test is
+`Queue.size(subscriber.queue) >= subscriber.buffer.messages`
+(`src/internal/JetStreamMemory.ts:185-197`), and `size` counts buffered items
+only — so "pending" means "arrived since the last whole-buffer drain", never
+"published since registration".
+
+**Principle.** Establish the granularity of the consumer's step from the source
+before modelling anything over it — in Lean, in a fake, or in your head.
+`take`-shaped names hide `takeAll`-shaped behavior, and pull granularity
+changes the set of reachable states, not merely the timing.
+
+---
+
+<a name="v2"></a>
+
+## V2 — `fail` delivers the buffer, so "last delivered" is honest
+
+**Evidence.** `ConsumerLagged.lastDeliveredSequence` is written on _enqueue_
+(`src/internal/JetStreamMemory.ts:199-200`) and deliberately not advanced by the
+overflowing message (`:185-197`). Nothing in the interpreter makes "enqueued"
+equal "observed": the field's name is a claim about the consumer, the code is a
+fact about the queue.
+
+**Where the claim is actually discharged — in the runtime.** `failCauseUnsafe`
+moves a non-empty queue to `Closing` and _keeps_ the buffer; `takeUnsafe` keeps
+dequeuing while `Closing`; `releaseCapacity` finalizes only once buffer and
+parked offers are both empty (`node_modules/effect/src/Queue.ts:1000-1015`,
+`:1606-1613`, `:2037-2069`). The consumer therefore drains what was buffered and
+_then_ sees the failure, and the last enqueued sequence really is the last
+observed one. `shutdown` breaks the equality — it clears the buffer and resumes
+parked offers with `false` (`:1191-1210`) — so the property is about the `fail`
+path only.
+
+**The test that exposed the gap.** Conformance C13 pins the interleaving with
+`Deferred`s and asserts `lastDeliveredSequence = 2n` after v1 was pulled, v2
+buffered, and v3 overflowed (`test/JetStreamConformance.ts:336-371`) — but its
+callback discards entries (`:349-355`), so "the consumer saw v2 before the
+error" was derived from `Queue.ts` and asserted nowhere. C14 was written to
+assert both halves and the consequence: `["v1", "v2"]` observed, then
+`ConsumerLagged { lastDeliveredSequence: 2n }`, then a subscription resumed
+exclusively after that sequence yielding `["v3", "v4"]` (`:373-428`).
+
+**Principle.** Three sequences exist at every subscription boundary — stored,
+enqueued, observed — and a field name usually claims the third while the code
+updates the second. Say which one you mean, name the runtime fact that makes
+them coincide, and put the coincidence in an assertion rather than in a reader's
+memory.
+
+---
+
+<a name="v3"></a>
+
+## V3 — A permit held across a parked offer stalls everyone
+
+**Evidence.** The memory interpreter serializes every operation on one
+`Semaphore.make(1)` so that "sequence assignment, fan-out order, and
+snapshot-versus-live boundaries are atomic"
+(`src/internal/JetStreamMemory.ts:91-96`), and `publish` fans out to subscribers
+inside that permit (`:181-203`). A `PullWindow` subscriber whose buffer is full
+parks the publishing fiber in `Queue.offer`
+(`node_modules/effect/src/Queue.ts:645-668`, `:2002-2015`), and `withPermits`
+releases only in an exit handler around the body
+(`node_modules/effect/src/Semaphore.ts:287-307`) — so the parked publisher still
+holds the permit.
+
+**The trace that exposes it.** Not the publisher's own stream: another one. A
+forked `publish` to a _different_ stream never completes while the first
+stream's consumer is blocked. Pinned memory-only at
+`test/JetStreamMemory.test.ts:125-176`, which polls both publisher fibers with
+`pollUnsafe()` after `Effect.yieldNow` (`:159-168`) and only then opens the
+gate. The publisher is released by whoever can release the suspension: a
+consumer pull re-admits it with `true` (`Queue.ts:2037-2069`), or an unsubscribe
+resumes it with `false` after `shutdown` clears the buffer (`:1191-1210`).
+Neither of those takes the interpreter's lock. The memory-only comment at
+`test/JetStreamMemory.test.ts:19-22` states the publisher-suspension face; the
+cross-stream reach needed the permit fact to be named before anyone could see
+it.
+
+**Decision, not repair.** The reach was documented and pinned rather than
+engineered away — the seam's `ConsumeBuffer` doc now carries it
+(`src/internal/JetStream.ts:43-55`) and ADR-0008 records it. Per-stream permits
+would have changed the interpreter's atomicity story, which is load-bearing.
+
+**Principle.** A suspension inside a critical section extends the critical
+section to everyone who can release the suspension. When you take a lock,
+enumerate the observers that do _not_ take it, and ask both what they can see
+and what they must do while you are parked.
+
+---
+
+<a name="v4"></a>
+
+## V4 — Generous parameters hide interpreter differences
+
+**Evidence.** Three parameter choices in one shared conformance suite, each
+hiding a real divergence between the in-memory interpreter and the live server
+adapter:
+
+- `roomy = { _tag: "TerminateOnLag", messages: 4096 }`, used by nearly every
+  shared case exactly so replay can never lag
+  (`test/JetStreamConformance.ts:17-19`). On the live adapter replay entries
+  pass through the same bounded queue as live delivery and count toward the lag
+  check (`src/internal/JetStreamLive.ts:465-473`, `:492-493`); on the memory
+  interpreter replay is emitted from the registration snapshot and bypasses the
+  queue entirely (`src/internal/JetStreamMemory.ts:246-252`). Under `roomy`
+  neither can lag, so the difference is unobservable.
+- The initial "last delivered" value differs — memory uses the head at
+  registration (`src/internal/JetStreamMemory.ts:233-239`), live uses `0n`
+  (`src/internal/JetStreamLive.ts:473`) — and is observable only when the
+  _first_ matching message overflows, which requires a zero capacity: the memory check `size >= messages`
+  (`src/internal/JetStreamMemory.ts:186-187`) and the live check `sizeUnsafe < capacity`
+  (`src/internal/JetStreamLive.ts:492`) both admit the first message for any `messages >= 1`,
+  and only `0` reaches the zero-capacity queue paths (`node_modules/effect/src/Queue.ts:654-658`).
+- `NewOnly` starts, which skip replay altogether.
+
+**What was done.** The zero capacity was rejected at the boundary rather than
+specified: `messages` must be a positive integer or `consume` dies before any
+resource is acquired, through one shared validator
+(`src/internal/JetStream.ts:60-76`), pinned at
+`test/JetStreamMemory.test.ts:93-123`. The replay-lag difference is real and
+stays; it is written down, and tested one-sided if at all.
+
+**Principle.** A shared suite proves the claims its parameters can express.
+Enumerate the parameter values at which two implementations would disagree, and
+for each one either reject it at the boundary (a sentinel capacity is not a
+contract), test it in the one-sided file, or record the difference. A green
+shared suite with generous parameters is evidence about those parameters.
+
+---
+
+<a name="v5"></a>
+
+## V5 — The reference-model oracle: `step`, a projection, and `Except`
+
+**Evidence.** The interpreter splits into two halves with very different
+verification costs. The sequential core — create/get/delete stream, publish,
+last-message-for-subject — is a pure
+`step : State → Op → Except Error (State × Ret)`: no queues, no fibers, no
+scopes. Transliterated line by line into Lean, its invariants became 25
+kernel-checked theorems in two short sessions. The consume surface did not follow,
+because every property it has depends on a runtime fact: overflow on where the
+pull lands, failure delivery on `fail` versus `shutdown`, unsubscribe on scope
+release order, cross-stream stall on the permit (V1–V3).
+
+**What made the proofs short.** Two shapes worth stealing in TypeScript:
+
+- **State every per-subject property through one projection.**
+  `forSubject(messages, subject)` — the storage-order filter the implementation
+  already computes — is the only lens. A committed publish then has exactly two
+  equations (the published subject's view becomes
+  `keepLatest(limit, prior ++ [new])`; every other subject's view is unchanged)
+  and the rest follows from them. It is also what a consumer sees through an
+  all-history subscription, so the model's statements and the suite's
+  observations are about the same object.
+- **Return `Except`, not a mutated state plus a flag.** "On failure the state is
+  unchanged" needs no theorem when the failure path cannot produce a state. Keep
+  the decision (validate, subject match, CAS check) separate from the mutation,
+  and no error path can half-apply.
+
+**A ready-made property catalogue.** Four theorems port directly into property
+tests over the memory interpreter: stored sequences strictly increase and stay
+below `nextSequence`; a positive limit bounds every subject's view; a publish
+rewrites the published subject's view to `keepLatest(limit, prior ++ [new])` and
+leaves every other subject's view untouched; a compare-and-set succeeds exactly
+when the expected value equals the subject's last sequence, and `0` exactly when
+that subject is empty. Exact statements live in `docs/signature-snapshot.md` of
+`../Foldable/formal/effect_nats_substrate/`.
+
+**Principle.** Find the line where semantics stop depending on the runtime and
+put the cheap, total verification on the near side of it. On the far side do not
+proceed on folklore — write the runtime facts down as named assumptions (V1–V3)
+and say what rests on them. Keep the claim exact either way: a passing proof or
+test establishes the proposition you stated, not fidelity. That Lean package's
+own assurance review records no refinement relation to the TypeScript
+interpreter — fidelity rests on the line-by-line diff — as a major open gap. Say
+the same kind of thing in a done-claim: what was verified, against what.

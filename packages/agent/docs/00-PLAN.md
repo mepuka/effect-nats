@@ -15,7 +15,7 @@ requirements.
 ## Modules
 
 ```text
-packages/agents/
+packages/agent/
   src/agents/protocol/  # protocol-derived subjects, codecs, validators, reply DFA
   src/agents/           # Wire seam, caller service, agent-host service, prompt engine
   src/test/             # conformance, state-machine, lifecycle, memory, live-broker evidence

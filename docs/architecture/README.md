@@ -36,6 +36,7 @@ Draft workbench material (not decisions):
 - [ADR-0001 implementation and conformance status](adr-0001-conformance-status.md)
 - [KV slice scoping](kv-slice-scoping.md)
 - [Object Store slice scoping](object-store-slice-scoping.md)
+- [Consume resume and buffer semantics brief](consume-resume-and-buffer-semantics-brief.md)
 - [Lean trace replay brief](lean-trace-replay-brief.md)
 - [Live-adapter observation fidelity brief](live-adapter-observation-fidelity-brief.md)
 - [Lean subscriber-trace replay brief](lean-subscriber-trace-replay-brief.md) — dispatched 2026-08-23, immutable

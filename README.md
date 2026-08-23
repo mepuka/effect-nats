@@ -15,7 +15,7 @@ built over the official [`nats-server`](https://github.com/nats-io/nats-server) 
 - **`effect-nats` (repository root, principal package):** an Effect-native client layer over the official
   `@nats-io/*` packages, covering Core lifecycle and subscriptions plus the JetStream primitives
   required by Key/Value and Object Store.
-- **[`effect-nats-agents`](packages/agents/README.md) subsystem:** an independent typed caller and
+- **[`effect-nats-agents`](packages/agent/README.md) subsystem:** an independent typed caller and
   agent-host implementation of the externally owned
   [Synadia Agent Protocol for NATS](https://github.com/synadia-ai/synadia-agent-sdk-docs) v0.3,
   with a vendored protocol, machine-checked requirement ledger, deterministic state-machine tests,
@@ -55,7 +55,7 @@ kept in [TO_FIX.md](TO_FIX.md).
 
 ## Synadia Agent Protocol adapter progress
 
-The package under `packages/agents` implements both sides of the v0.3 wire contract:
+The package under `packages/agent` implements both sides of the v0.3 wire contract:
 
 - discovery, protocol-version filtering, heartbeat liveness, query replies, and interruptible
   streamed prompts for callers;

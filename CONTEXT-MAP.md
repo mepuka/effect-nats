@@ -4,7 +4,7 @@
 
 - **NATS client** (repository root): the principal Effect-native client for NATS Core and the
   JetStream primitives used by Key/Value and Object Store.
-- [Synadia Agent Protocol adapter](packages/agents/CONTEXT.md): an independent Effect
+- [Synadia Agent Protocol adapter](packages/agent/CONTEXT.md): an independent Effect
   implementation of the externally owned Synadia Agent Protocol for NATS.
 
 ## Relationships

@@ -67,6 +67,17 @@ The seam must carry _all_ observable wire facts. We lost a protocol rule
 header _presence_ and only kept parsed header values — the classifier could
 not be right about data it never saw (case study S5).
 
+### Phase 1a — Name what the runtime decides, before you model anything
+
+Before modelling a protocol over Streams, write down what the runtime decides
+as **named assumptions** — in the design note, the seam doc, or the test file.
+Answer from source: the queue strategy at the bound; what `size` counts; how
+much one pull drains; what `fail` versus `shutdown` do to buffered items and a
+parked producer; scope release order; when `Stream.unwrap`'s setup runs; what a
+held permit covers across a suspension. All are cited in the api-notes section
+"What the runtime decides" — re-open them; what you cannot answer is a probe
+(Phase 3), not a guess.
+
 ### Phase 1 — Model invariants as data, then reuse the model everywhere
 
 If the domain has a legal-sequence rule ("exactly one ack first, terminator
@@ -141,7 +152,9 @@ concrete ones are expected, and payloads that break `JSON.stringify`
 channel — a defect escaping a boundary is a bug even when no spec clause
 names it (case studies P2, and the hardening pass).
 
-**4c. Memory pass.** Three concrete tests, all cheap:
+**4c. Memory pass.** Heap and leaks — not the "memory interpreter"
+(`src/internal/JetStreamMemory.ts`, effect-nats's fake/model evidence tier).
+Three concrete tests, all cheap:
 
 - a **leak counter** on the test interpreter (`subscriptionCount()`):
   N completed operations + one interrupted mid-flight must return the count
@@ -226,13 +239,41 @@ You are done when ALL of these hold, and not before:
     dependency: a pending-pull interruption completes in bounded time,
     unsubscribe/`return` runs exactly once, no post-release delivery, and no
     hidden growable upstream buffer. → S6.
+12. **Three sequences exist at a subscription boundary — stored, enqueued,
+    observed.** They coincide only under specific runtime facts; a field name,
+    a doc, or a test must say which one it means. → V2.
+13. **One `Stream.fromQueue` pull drains the whole buffer** — occupancy goes to
+    zero, not down by one, so "pending" means "since the last drain". → V1.
+14. **`fail` delivers the buffer then the error; `shutdown` discards it** and
+    wakes a parked producer with `false` — no error, no interruption. → V2.
+15. **A suspension inside a critical section extends it** to whoever can release
+    the suspension; name the observers who do not take your lock. → V3.
+16. **A stream's `Stream.unwrap` setup runs at the first pull**, so readiness is
+    witnessed by a consumer-side signal (effect-nats: `CaughtUp`), never by
+    having built the stream. → C1, C2, V2.
+
+## The verification boundary
+
+Split the work where semantics stop depending on the runtime. The near side —
+a pure `step : State → Op → Except Error (State × Ret)` stated through one
+projection (in effect-nats, `forSubject`) — is cheap to verify totally: that
+sequential JetStream core became 25 machine-checked theorems in two short sessions. The far
+side (consume, buffers, scopes) is verifiable only against the Phase 1a named
+assumptions. Either way, a passing test or proof establishes the proposition you
+stated, not fidelity to the system — say in the done-claim what was verified
+against what, and which relation is still missing. The frozen theorem list in
+`../Foldable/formal/effect_nats_substrate/docs/signature-snapshot.md` is a ready
+property catalogue for the memory interpreter. → V5.
 
 ## When to read the references
 
 - Fixing or writing anything listed above → open
   [references/case-studies.md](references/case-studies.md) and find the
   matching case (S=streaming, C=concurrency, P=performance/memory,
-  E=environment). Each gives the exact error, the offending code, the
-  revealing test, and the repaired code.
-- Unsure of an Effect 4 API shape, or writing TestClock/FastCheck tests →
-  open [references/effect4-api-notes.md](references/effect4-api-notes.md).
+  E=environment, V=verification findings from formally modelling the
+  effect-nats memory interpreter). S/C/P/E give the error, the offending code,
+  the revealing test, and the repair; V gives the evidence, the trace that
+  exposes it, and the principle.
+- Unsure of an Effect 4 API shape, or writing TestClock/FastCheck tests → open
+  [references/effect4-api-notes.md](references/effect4-api-notes.md); its "What
+  the runtime decides" section is the cited source for Phase 1a and laws 12–16.

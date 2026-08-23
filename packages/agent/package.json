@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/mepuka/effect-nats.git",
-    "directory": "packages/agents"
+    "directory": "packages/agent"
   },
   "scripts": {
     "dev": "bun run src/main.ts",
