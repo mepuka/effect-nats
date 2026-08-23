@@ -92,6 +92,52 @@ it.effect("a PullWindow buffer suspends production and delivers in order without
     yield* Fiber.interrupt(fiber)
   }))
 
+it.effect(
+  "memory: PullWindow(1) admits its first entry before CaughtUp is consumed",
+  () =>
+    Effect.gen(function*() {
+      const { service } = yield* Memory.make
+      yield* service.createStream(kvConfig("pull-caught-up"))
+      const ready = yield* Deferred.make<void>()
+      const pulled = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
+      const observed: Array<string> = []
+      const consumer = yield* Effect.forkChild(
+        Stream.runForEach(
+          service.consume("KV_pull-caught-up", {
+            filters: ["$KV.pull-caught-up.>"],
+            start: { _tag: "NewOnly" },
+            buffer: { _tag: "PullWindow", messages: 1 }
+          }),
+          (event) =>
+            event._tag === "CaughtUp"
+              ? Deferred.succeed(ready, void 0).pipe(
+                Effect.andThen(Deferred.await(gate)),
+                Effect.andThen(Effect.sync(() => observed.push("CaughtUp")))
+              )
+              : Effect.sync(() => observed.push(decoder.decode(event.message.payload))).pipe(
+                Effect.andThen(Deferred.succeed(pulled, void 0)),
+                Effect.asVoid
+              )
+        ),
+        { startImmediately: true }
+      )
+
+      yield* Deferred.await(ready)
+      expect(
+        yield* service.publish(
+          "KV_pull-caught-up",
+          "$KV.pull-caught-up.k",
+          utf8.encode("v1")
+        )
+      ).toBe(1n)
+      yield* Deferred.succeed(gate, void 0)
+      yield* Deferred.await(pulled)
+      expect(observed).toEqual(["CaughtUp", "v1"])
+      yield* Fiber.interrupt(consumer)
+    })
+)
+
 it.effect("invalid ConsumeBuffer capacities die before acquiring a subscription", () =>
   Effect.gen(function*() {
     const memory = yield* Memory.make

@@ -480,4 +480,98 @@ export const conformance = (label: string, withService: WithService, timeout = 2
         ).toEqual(["v1", "v2", "v3"])
       })
   )
+
+  its(
+    "C16 — getStream reports unlimited per-subject history as 0",
+    (service) =>
+      Effect.gen(function*() {
+        const unlimited = kvConfig("unlimited")
+        yield* service.createStream(unlimited)
+        expect(yield* service.getStream(unlimited.name)).toEqual(unlimited)
+
+        const limited = { ...kvConfig("limited"), maxMessagesPerSubject: 3 }
+        yield* service.createStream(limited)
+        expect(yield* service.getStream(limited.name)).toEqual(limited)
+      })
+  )
+
+  its("C17 — stored headers are the publisher's headers", (service) =>
+    Effect.gen(function*() {
+      yield* service.createStream(kvConfig("headers"))
+      const publisherHeaders = new Map([["x-trace", "1"]])
+      yield* service.publish("KV_headers", "$KV.headers.k", utf8.encode("v1"), {
+        expectedLastSubjectSequence: 0n,
+        headers: publisherHeaders
+      })
+
+      const last = yield* service.lastMessageForSubject("KV_headers", "$KV.headers.k")
+      expect(Array.from(last.headers)).toEqual([["x-trace", "1"]])
+
+      const replay = yield* service
+        .consume("KV_headers", {
+          filters: ["$KV.headers.>"],
+          start: { _tag: "AllHistory" },
+          buffer: roomy
+        })
+        .pipe(
+          Stream.takeWhile((event) => event._tag !== "CaughtUp"),
+          Stream.runCollect
+        )
+      expect(replay).toHaveLength(1)
+      expect(replay[0]?._tag).toBe("Entry")
+      if (replay[0]?._tag === "Entry") {
+        expect(Array.from(replay[0].message.headers)).toEqual([["x-trace", "1"]])
+      }
+
+      yield* service.publish("KV_headers", "$KV.headers.k", utf8.encode("v2"), {
+        headers: new Map([["Nats-Rollup", "sub"]])
+      })
+      const rolledUp = yield* service.lastMessageForSubject("KV_headers", "$KV.headers.k")
+      expect(Array.from(rolledUp.headers)).toEqual([["Nats-Rollup", "sub"]])
+    }))
+
+  its(
+    "C18 — a TerminateOnLag(1) NewOnly subscription admits its first entry before the consumer pulls CaughtUp",
+    (service) =>
+      Effect.gen(function*() {
+        yield* service.createStream(kvConfig("terminate-caught-up"))
+        const ready = yield* Deferred.make<void>()
+        const pulled = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const observed: Array<string> = []
+        const fiber = yield* Effect.forkChild(
+          Stream.runForEach(
+            service.consume("KV_terminate-caught-up", {
+              filters: ["$KV.terminate-caught-up.>"],
+              start: { _tag: "NewOnly" },
+              buffer: { _tag: "TerminateOnLag", messages: 1 }
+            }),
+            (event) =>
+              event._tag === "CaughtUp"
+                ? Deferred.succeed(ready, void 0).pipe(
+                  Effect.andThen(Deferred.await(gate)),
+                  Effect.andThen(Effect.sync(() => observed.push("CaughtUp")))
+                )
+                : Effect.sync(() => observed.push(text(event.message))).pipe(
+                  Effect.andThen(Deferred.succeed(pulled, void 0)),
+                  Effect.asVoid
+                )
+          ),
+          { startImmediately: true }
+        )
+
+        yield* Deferred.await(ready)
+        expect(
+          yield* service.publish(
+            "KV_terminate-caught-up",
+            "$KV.terminate-caught-up.k",
+            utf8.encode("v1")
+          )
+        ).toBe(1n)
+        yield* Deferred.succeed(gate, void 0)
+        yield* Deferred.await(pulled)
+        expect(observed).toEqual(["CaughtUp", "v1"])
+        yield* Fiber.interrupt(fiber)
+      })
+  )
 }

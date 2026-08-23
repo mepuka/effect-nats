@@ -25,6 +25,7 @@ Accepted ADRs:
   retry/drain supervision from the transport branch; composes with ADR-0001 (reconnect) and
   ADR-0002 (wrap seam); its deferred subscription-queue decision is discharged by ADR-0005
 - [ADR-0008: Consume resume and buffer semantics](adr-0008-consume-resume-and-buffer-semantics.md)
+- [ADR-0009: Live adapter observation fidelity](adr-0009-live-adapter-observation-fidelity.md)
 
 Proposed ADRs (not accepted decisions):
 
@@ -36,6 +37,7 @@ Draft workbench material (not decisions):
 - [KV slice scoping](kv-slice-scoping.md)
 - [Object Store slice scoping](object-store-slice-scoping.md)
 - [Lean trace replay brief](lean-trace-replay-brief.md)
+- [Live-adapter observation fidelity brief](live-adapter-observation-fidelity-brief.md)
 
 Research evidence (not decisions):
 

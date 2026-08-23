@@ -20,9 +20,9 @@ temporary store directory. Resource cleanup is the existing scope finalizer.
 - Fixture Foldable commit: `ef5c3ebe1157`
 - Comparison ignored: `timestampMillis` only
 
-The exact observed outcomes below are asserted by
-`test/fixtures/lean/live-overrides.json`. A later client or server behavior change therefore fails
-the replay instead of silently replacing the record.
+At the time of the original replay, the exact observed outcomes below were asserted by the
+then-current `test/fixtures/lean/live-overrides.json`. The resolved section records when the adapter
+made those overrides unnecessary; the findings remain the historical record.
 
 ## Findings
 
@@ -32,8 +32,25 @@ the replay instead of silently replacing the record.
 | `positive` |    4 | `lastMessageForSubject("KV_b", "$KV.b.k")` returns `h2` with no headers        | The message matches after ignoring its timestamp, but its headers contain `Nats-Expected-Last-Subject-Sequence: 1`, retained from the successful CAS publish. |
 | `cas`      |    5 | `lastMessageForSubject("KV_b", "$KV.b.k")` returns `v2` with no headers        | The message matches after ignoring its timestamp, but its headers contain `Nats-Expected-Last-Subject-Sequence: 1`, retained from the successful CAS publish. |
 
-These are reported divergences only. This slice does not change `src/`, the Lean fixture, or the
-memory interpreter to reconcile them.
+These were reported divergences only. The originating replay slice did not change `src/`, the Lean
+fixture, or the memory interpreter to reconcile them.
+
+## Resolved — 2026-08-22
+
+The ADR-0009 implementation commit (this commit) resolved all three recorded divergences. The
+fixture was regenerated from Foldable
+`8b6cf8acc7fe2735184e30dac51bbd60b979b80f` at snapshot `r2.1`, and the live override file now has
+an empty trace map.
+
+| Trace      | Step | Resolution                                                                                      |
+| ---------- | ---: | ----------------------------------------------------------------------------------------------- |
+| `positive` |    1 | Rule 1 normalizes absent or non-positive server per-subject limits to the seam's `0` on read.   |
+| `positive` |    4 | Rule 2 removes `Nats-Expected-*` publish-option headers from every stored-message read path.    |
+| `cas`      |    5 | Rule 2 applies the same stored-header normalization after a successful compare-and-set publish. |
+
+The memory and live replays both passed all eight generated traces with the empty override set on
+`nats-server v2.14.5`. The rows above remain as the historical observations that motivated the
+adapter rules; this replay establishes compatibility only for the recorded histories.
 
 ## Explicit non-findings
 

@@ -26,7 +26,8 @@ import {
 // Live adapter over the official @nats-io/jetstream client (ADR-0002). This is
 // the single number<->bigint conversion point of ADR-0004. Server error codes
 // map to the seam's semantic tags here; each mapping is pinned by an
-// integration test against a real nats-server.
+// integration test against a real nats-server. ADR-0009 governs normalization
+// of server-only representations at the stored-message and stream-config seams.
 
 type Attempt<T> = { readonly _tag: "ok"; readonly value: T } | {
   readonly _tag: "err"
@@ -130,6 +131,23 @@ const fromMsgHdrs = (hdrs: MsgHdrs | undefined): ReadonlyMap<string, string> => 
   return map
 }
 
+// ADR-0009: StoredMessage exposes publisher content. DIRECT.GET metadata and the
+// Nats-Expected-* publish precondition family are adapter mechanics, not
+// stored content; Nats-Rollup and every other publisher header remain.
+const storedHeaders = (hdrs: MsgHdrs | undefined): ReadonlyMap<string, string> => {
+  const map = new Map(fromMsgHdrs(hdrs))
+  for (const key of map.keys()) {
+    const normalized = key.toLowerCase()
+    if (
+      directMetadataHeaders.some((metadata) => metadata.toLowerCase() === normalized)
+      || normalized.startsWith("nats-expected-")
+    ) {
+      map.delete(key)
+    }
+  }
+  return map
+}
+
 export const make = (connection: NatsConnection): Effect.Effect<JetStream["Service"]> =>
   Effect.gen(function*() {
     const js = jetstream(connection)
@@ -168,7 +186,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
           subject: stored.subject,
           sequence,
           payload: stored.data,
-          headers: fromMsgHdrs(stored.header),
+          headers: storedHeaders(stored.header),
           timestampMillis: stored.time.getTime()
         } satisfies StoredMessage
       })
@@ -205,10 +223,11 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               : Effect.die(result.cause)
           }
           const config = result.value.config
+          const maxMessagesPerSubject = config.max_msgs_per_subject ?? 0
           return {
             name: config.name,
             subjects: [...config.subjects ?? []],
-            maxMessagesPerSubject: config.max_msgs_per_subject ?? 0,
+            maxMessagesPerSubject: maxMessagesPerSubject <= 0 ? 0 : maxMessagesPerSubject,
             allowRollup: config.allow_rollup_hdrs ?? false
           } satisfies StreamConfig
         }),
@@ -310,13 +329,11 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
             stream,
             "lastMessageForSubject Nats-Sequence"
           ))
-          const headers = new Map(fromMsgHdrs(stored.header))
-          for (const key of directMetadataHeaders) headers.delete(key)
           return {
             subject: stored.subject,
             sequence,
             payload: stored.data,
-            headers,
+            headers: storedHeaders(stored.header),
             timestampMillis: stored.time.getTime()
           } satisfies StoredMessage
         }),
@@ -402,7 +419,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                     subject: message.subject,
                     sequence,
                     payload: message.data,
-                    headers: fromMsgHdrs(message.headers),
+                    headers: storedHeaders(message.headers),
                     timestampMillis: message.time.getTime()
                   }
                 })
@@ -418,9 +435,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 (q) => Queue.shutdown(q)
               )
               const caughtUpEvent: ConsumeEvent = { _tag: "CaughtUp" }
+              const caughtUpAtRegistration = info.num_pending === 0
               const pullLoop = Effect.gen(function*() {
-                let caughtUp = info.num_pending === 0
-                if (caughtUp) yield* Queue.offer(queue, caughtUpEvent)
+                let caughtUp = caughtUpAtRegistration
                 while (true) {
                   const next = yield* attempt(() => consumer.next({ expires: 5_000 }))
                   if (next._tag === "err") {
@@ -460,8 +477,13 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
                 }
               })
               yield* Effect.forkScoped(pullLoop, { startImmediately: true })
-              return Stream.fromQueue(queue)
+              return caughtUpAtRegistration
+                ? Stream.make(caughtUpEvent).pipe(Stream.concat(Stream.fromQueue(queue)))
+                : Stream.fromQueue(queue)
             }
+            // ADR-0009 reserves the extra physical slot for CaughtUp discovered
+            // after replay; the admission guard below still bounds entries at
+            // the declared capacity.
             const queue = yield* Effect.acquireRelease(
               Queue.bounded<
                 ConsumeEvent,
@@ -469,9 +491,13 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               >(capacity + 1),
               (q) => Queue.shutdown(q)
             )
-            let caughtUp = info.num_pending === 0
+            const caughtUpEvent: ConsumeEvent = { _tag: "CaughtUp" }
+            const caughtUpAtRegistration = info.num_pending === 0
+            let caughtUp = caughtUpAtRegistration
+            // ADR-0009: the registration-time marker is outside the bounded queue, so
+            // every valid capacity can admit an entry before it is consumed.
+            // Therefore this initial value is unobservable for messages >= 1.
             let lastDelivered = 0n
-            if (caughtUp) Queue.offerUnsafe(queue, { _tag: "CaughtUp" })
             let stop = () => {}
             const callback = (message: JsMsg) => {
               const entry = entryOf(message)
@@ -485,7 +511,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               if (dropped) {
                 if (!caughtUp && message.info.pending === 0) {
                   caughtUp = true
-                  Queue.offerUnsafe(queue, { _tag: "CaughtUp" })
+                  Queue.offerUnsafe(queue, caughtUpEvent)
                 }
                 return
               }
@@ -502,7 +528,7 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               lastDelivered = entry.success.message.sequence
               if (!caughtUp && message.info.pending === 0) {
                 caughtUp = true
-                Queue.offerUnsafe(queue, { _tag: "CaughtUp" })
+                Queue.offerUnsafe(queue, caughtUpEvent)
               }
             }
             const messages = yield* Effect.acquireRelease(
@@ -515,7 +541,9 @@ export const make = (connection: NatsConnection): Effect.Effect<JetStream["Servi
               () => Queue.failCauseUnsafe(queue, Cause.fail(new StreamNotFound({ stream }))),
               () => Queue.failCauseUnsafe(queue, Cause.fail(new StreamNotFound({ stream })))
             )
-            return Stream.fromQueue(queue)
+            return caughtUpAtRegistration
+              ? Stream.make(caughtUpEvent).pipe(Stream.concat(Stream.fromQueue(queue)))
+              : Stream.fromQueue(queue)
           })
         )
     })
