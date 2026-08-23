@@ -177,6 +177,8 @@ in 25/25 but passed model terminal membership in 0/25.
 Every live seed 731800–731824 produced the same outside history for `sa-replay-lag`:
 `[[Entry 1, Failed(ConsumerLagged, lastDeliveredSequence = 1)]]`. It is adjudicated as the expected
 class-(a) live replay-through-queue divergence already recorded by the gated rows, not as a memory
-class-A4 finding. No memory history fell outside either applicable set. The sampled yields exposed
+class-A4 finding. The history is declared once in the finding-linked `freeRunning` section of
+`live-overrides-subscriber.json`; the driver asserts both that link and exact membership in the
+recorded live set. No memory history fell outside either applicable set. The sampled yields exposed
 multiple accepted lag/resume histories and more memory than live chunk placements for `sa-drain`;
 they do not exhaust scheduler placements or interleavings inside fan-out.

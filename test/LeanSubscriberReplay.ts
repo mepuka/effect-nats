@@ -116,7 +116,14 @@ const SubscriberTraceOverrides = Schema.Struct({
   finalObserved: Schema.optional(Schema.Struct({
     finding: Schema.String,
     events: SubscriberObserved
-  }))
+  })),
+  freeRunning: Schema.optional(Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      finding: Schema.String,
+      histories: Schema.Array(SubscriberHistory)
+    })
+  ))
 })
 const SubscriberLiveOverrides = Schema.Struct({
   schema: Schema.Literal(2),
@@ -139,6 +146,10 @@ const subscriberLiveOverrides = existsSync(overridesUrl)
     )
   )
   : { schema: 2 as const, traces: {} }
+
+/** Finding-linked live histories that intentionally sit outside the generated model set. */
+export const subscriberFreeRunningOverride = (trace: string, id: number) =>
+  subscriberLiveOverrides.traces[trace]?.freeRunning?.[String(id)]
 
 export interface SubscriberReplayService {
   readonly service: JetStream["Service"]

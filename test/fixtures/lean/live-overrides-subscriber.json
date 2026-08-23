@@ -147,6 +147,29 @@
             ]
           }
         ]
+      },
+      "freeRunning": {
+        "0": {
+          "finding": "docs/research/lean-trace-live-findings.md",
+          "histories": [
+            [
+              [
+                {
+                  "_tag": "Entry",
+                  "sequence": "1"
+                },
+                {
+                  "_tag": "Failed",
+                  "error": {
+                    "_tag": "ConsumerLagged",
+                    "stream": "KV_b",
+                    "lastDeliveredSequence": "1"
+                  }
+                }
+              ]
+            ]
+          ]
+        }
       }
     }
   }

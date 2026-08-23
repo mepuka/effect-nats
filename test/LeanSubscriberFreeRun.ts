@@ -3,6 +3,7 @@ import { Effect, Exit, Fiber, Queue, Result, Stream } from "effect"
 import { FastCheck } from "effect/testing"
 import {
   type FixtureSubscriberStep,
+  subscriberFreeRunningOverride,
   type SubscriberReplayService,
   subscriberTraceFixture,
   type WithSubscriberService
@@ -201,6 +202,7 @@ const cleanup = (states: Iterable<FreeConsumerState>): Effect.Effect<void> =>
   Effect.forEach(states, (state) => Fiber.interrupt(state.fiber), { discard: true })
 
 const runOnce = (
+  label: string,
   target: SubscriberReplayService,
   trace: typeof subscriberTraceFixture.traces[number],
   seed: number
@@ -225,7 +227,11 @@ const runOnce = (
         case "register": {
           const state = yield* startConsumer(target, step)
           states.set(step.id, state)
-          yield* awaitRegistration(state, context)
+          const reachedCaughtUp = yield* awaitRegistration(state, context)
+          expect(
+            reachedCaughtUp || (label === "live" && trace.name === "sa-replay-lag"),
+            `${context}: ${label} registration reached CaughtUp or a recorded live divergence`
+          ).toBe(true)
           break
         }
         case "pull":
@@ -304,7 +310,7 @@ export const leanSubscriberFreeRun = (
             readonly adjudication: string
           }> = []
           for (const seed of seeds) {
-            const observations = yield* withService((target) => runOnce(target, trace, seed))
+            const observations = yield* withService((target) => runOnce(label, target, trace, seed))
             const runReachedTerminal = observations.length > 0
               && observations.every((observation) => observation.terminal)
             let runPassedTerminal = runReachedTerminal
@@ -321,26 +327,26 @@ export const leanSubscriberFreeRun = (
                 canonical(normalize(history, new Set(subscriberTraceFixture.compare.ignore)))
               )
               const member = allowed.includes(encoded)
-              const knownLiveReplayLag = label === "live" && trace.name === "sa-replay-lag"
-              if (!member && knownLiveReplayLag) {
-                const expectedLiveFinding = [[
-                  { _tag: "Entry", sequence: "1" },
-                  {
-                    _tag: "Failed",
-                    error: {
-                      _tag: "ConsumerLagged",
-                      stream: "KV_b",
-                      lastDeliveredSequence: "1"
-                    }
-                  }
-                ]]
-                expect(actual, `${label} ${trace.name} seed ${seed}: recorded class-(a) history`)
-                  .toEqual(expectedLiveFinding)
+              const liveFinding = label === "live"
+                ? subscriberFreeRunningOverride(trace.name, observation.id)
+                : undefined
+              if (!member && liveFinding !== undefined) {
+                expect(
+                  liveFinding.finding,
+                  `${label} ${trace.name} seed ${seed}: finding link`
+                ).toBe("docs/research/lean-trace-live-findings.md")
+                const recorded = liveFinding.histories.map((history) =>
+                  canonical(normalize(history, new Set(subscriberTraceFixture.compare.ignore)))
+                )
+                expect(
+                  recorded.includes(encoded),
+                  `${label} ${trace.name} seed ${seed}: recorded class-(a)/(c) history: ${encoded}`
+                ).toBe(true)
                 outsideOutcomes.push({
                   seed,
                   id: observation.id,
                   history: actual,
-                  adjudication: "recorded-live-replay-lag"
+                  adjudication: "finding-linked-live-divergence"
                 })
               } else {
                 const findingClass = label === "memory" ? "class-A4" : "class-(a)/(c)"
